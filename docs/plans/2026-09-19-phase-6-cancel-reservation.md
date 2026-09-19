@@ -9,8 +9,14 @@ passage of time.
 
 ## Preconditions
 
-**Phases 3–5 are not merged as of this writing.** This plan is written against the state they leave
-behind and must not be started before they are merged and green. Re-verify each fact below by
+**Phase 3 is at ship stage; phases 4 and 5 are ticketed
+(`FEAT-4-PHASE-4-RELEASE-CAPACITY`, `FEAT-5-PHASE-5-AVAILABILITY-AUDIT`) and not yet executed.**
+Start this phase only once all three have merged and CI is green on `develop`.
+
+This phase leans on phase 4 more than the others do: `ReservationSnapshot` and the
+`RESERVATION_TERMINAL` refusal are both phase 4's, and the cancel service is deliberately shaped
+like the release service. If phase 4 named either of them differently, follow what is actually in
+the repository and say so — do not reintroduce a duplicate type. Re-verify each fact below by
 reading the repository; if any is false, stop.
 
 - Phases 3–5 have landed: reserve, release, availability and the audit read model exist and are green.
