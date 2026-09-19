@@ -49,6 +49,17 @@ Single NestJS service. `src/` and `test/` at repository root, per plan.md's Proj
 
 **⚠️ CRITICAL**: T012 and T019 encode the arithmetic the entire feature rests on. Get them wrong and every story is wrong.
 
+**Phase 1 carry-over closed here** (found while planning this phase; see
+`docs/plans/2026-09-19-phase-2-foundational.md`): `src/config/data-source.ts` is referenced by the
+`migration:run` script but was never created; `test:unit` invokes `--selectProjects unit` against a
+Jest config that defines no projects; `docker-compose.yml` has no Redis service although T030
+requires a Redis-backed throttler store; and the `eslint-plugin-boundaries` v7 selector migration
+did not make the Phase 1 merge, so `eslint.config.mjs` still carries deprecated bare element
+selectors that begin emitting warnings the moment T022 creates the first file matching an element
+pattern. T015 additionally depends on a non-owner `app_role` member existing, without which the
+T019 `REVOKE` does not bind (see data-model.md). All are prerequisites of T015 and are sequenced
+ahead of it in the execution plan.
+
 ### Money and shared kernel
 
 - [ ] T009 [P] Write failing unit tests for the `Money` value object in `test/unit/money.spec.ts`: construction from `number` is rejected, currency must match `^[A-Z]{3}$`, arithmetic across differing currencies throws, values beyond `Number.MAX_SAFE_INTEGER` survive a round trip

@@ -158,6 +158,16 @@ The authority. Append-only: `UPDATE` and `DELETE` are revoked from the applicati
 (`REVOKE UPDATE, DELETE ON capacity_ledger_entry FROM app_role;` — issued in the migration, not
 merely intended).
 
+**The revoke only binds if the application is not the table's owner.** PostgreSQL grants an
+object's owner every privilege on it implicitly, and `REVOKE` against the owner is a no-op — so an
+application connecting as the role that ran the migration would retain `UPDATE` and `DELETE`
+regardless, and the append-only guarantee would be decorative. The deployment therefore separates
+the two identities: migrations run as the owning role, and the service connects as a member of
+`app_role`, which owns nothing. Locally this is `capacity` (owner) and `capacity_app` (member),
+created when the Postgres container initialises. The integration test asserts that an `UPDATE`
+issued on the connection the service actually uses raises SQLSTATE `42501`; asserting it on the
+owner's connection would pass while proving nothing.
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `UUID` PK | |
