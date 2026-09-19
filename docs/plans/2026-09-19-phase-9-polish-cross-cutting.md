@@ -9,8 +9,11 @@ requires.
 
 ## Preconditions
 
-**Phases 3–8 are not merged as of this writing.** This plan is written against the state they leave
-behind. Re-verify each fact below by reading the repository; if any is false, stop.
+**Phase 3 is at ship stage; phases 4–8 are ticketed and not yet executed.** Start this phase only
+once every one of them has merged and CI is green on `develop`. This is the last phase, so it
+audits what the other eight built: if an earlier phase deviated from its plan, the gaps surface
+here as failing verification rather than as missing work. Re-verify each fact below by reading the
+repository; if any is false, stop.
 
 - Phases 3–8 have landed. Reserve, release, cancel, availability, audit reads, the treasury consumer
   and reconciliation snapshots all exist and are green.
@@ -57,7 +60,7 @@ ACLs, the quickstart run, the coverage audit, and removing the constitution's sc
 **T101 and T102 were added to tasks.md after the initial spec-kit generation** and are in scope
 here:
 
-- **T101 — the FR-006b retention sweep** (Task 13). The coverage sweep found it orphaned across all
+- **T101 — the FR-006b retention sweep** (Task 10). The coverage sweep found it orphaned across all
   nine plans: phase 3 deferred it here, tasks.md never numbered it, and T042 already depends on its
   effect, so `IDEMPOTENCY_EXPIRED` was unreachable and `request_record` grew without bound.
 - **T102 — extending `scripts/verify-uat.sh` to phases 3–8** (Task 9). The phase-1 verifier would
@@ -91,7 +94,7 @@ here:
    regresses.
 6. **FR-006b is enforced here or nowhere.** Phase 3 deliberately deferred the retention sweep and
    made the `EXPIRED` state representable; T042 already *reads* the outcome-nulled case to answer
-   `IDEMPOTENCY_EXPIRED`. T101 now schedules the ageing that produces it (Task 13). The sweep
+   `IDEMPOTENCY_EXPIRED`. T101 now schedules the ageing that produces it (Task 10). The sweep
    **nulls the outcome and keeps the row** — deleting it outright would make a reused identifier
    indistinguishable from a new one, which is the failure FR-006b names explicitly.
 7. **`verify-uat.sh` is extended per phase or it measures nothing.** Add the phase 3–8 criteria as
@@ -204,7 +207,7 @@ Add the phase 3–8 acceptance criteria as their own sections, keeping the exist
 `env.schema.ts` equality assertion. The script still must not start Docker; it asserts what can be
 asserted statically and names what it cannot.
 
-### Task 13: The request-record retention sweep (T101)
+### Task 10: The request-record retention sweep (T101)
 
 Before T101 existed, the only mention of retention in tasks.md was T042, which **consumes** the
 aged-out state (`outcome` nulled by retention → `IDEMPOTENCY_EXPIRED`) while nothing produced it.
@@ -226,19 +229,19 @@ Write `test/integration/idempotency-retention.spec.ts`: a record past the window
 `IDEMPOTENCY_EXPIRED` on reuse and is **not** treated as new; the row still exists; a `PENDING` row
 is untouched.
 
-### Task 10: The quickstart run (T098)
+### Task 11: The quickstart run (T098)
 
 Run all ten `quickstart.md` scenarios against a fresh `docker compose up`, confirming a working
 service inside 10 minutes from clone (SC-008). Fix the document where it has drifted; do not fix the
 document by weakening a scenario.
 
-### Task 11: Coverage and subsystem audit (T099)
+### Task 12: Coverage and subsystem audit (T099)
 
 `npm run test:cov` reports ≥ 80% and the threshold **fails the build** when it does not — verify by
 temporarily breaking it, then restoring. Confirm every subsystem has a test home: `auth/`, `fx/`,
 `treasury/dlq/`, `observability/`, `config/`, `migrations/`.
 
-### Task 12: Remove the constitution scratch comment (T100)
+### Task 13: Remove the constitution scratch comment (T100)
 
 Delete the Sync Impact Report HTML comment from `.specify/memory/constitution.md` — temporary review
 scratch, not governance content.

@@ -9,8 +9,11 @@ arbitrating a snapshot whose version collides with different content.
 
 ## Preconditions
 
-**Phase 7 is not merged as of this writing.** This plan is written against the state it leaves
-behind. Re-verify each fact below by reading the repository; if any is false, stop.
+**Phase 7 is ticketed as `FEAT-7-PHASE-7-TREASURY-EVENTS` and not yet executed.** Start this phase
+only once it has merged and CI is green on `develop`. This phase shares phase 7's consumer, DLQ,
+retry classification and `processed_message` dedupe rather than reimplementing any of them, so a
+phase 7 that deviated from its plan changes what this one inherits. Re-verify each fact below by
+reading the repository; if any is false, stop.
 
 - Phase 7 has landed: the consumer, schema validation, retry classification, DLQ and
   `processed_message` dedupe exist and are shared by this phase.

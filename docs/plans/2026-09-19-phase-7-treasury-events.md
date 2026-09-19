@@ -9,8 +9,15 @@ inapplicable message is quarantined with a reason.
 
 ## Preconditions
 
-**Phases 3–6 are not merged as of this writing.** This plan is written against the state they leave
-behind. Re-verify each fact below by reading the repository; if any is false, stop.
+**Phase 3 is at ship stage; phases 4, 5 and 6 are ticketed
+(`FEAT-4-PHASE-4-RELEASE-CAPACITY`, `FEAT-5-PHASE-5-AVAILABILITY-AUDIT`,
+`FEAT-6-PHASE-6-CANCEL-RESERVATION`) and not yet executed.** Start this phase only once all four
+have merged and CI is green on `develop`.
+
+This phase is the first to create `src/treasury/`, so unlike phases 4–6 it inherits interfaces
+rather than extending a file it shares. Re-verify each fact below by reading the repository —
+several of them were wrong in an earlier draft of this plan and were corrected against the actual
+source; if any is false now, stop.
 
 - Phases 3–6 have landed. The HTTP write paths, the availability read and the audit read exist.
 - `src/treasury/` **does not exist yet**, but the boundaries matrix is **already correct**:
