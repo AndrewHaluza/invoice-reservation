@@ -37,7 +37,7 @@ money — integers only, per Constitution I.
 **Testing**: Jest for unit and integration; Testcontainers (Postgres + Redpanda) for integration
 and concurrency tests; `supertest` for HTTP contract tests. Coverage gate 80% per Constitution VI.
 
-**Target Platform**: Linux container. Local development via `docker compose up`.
+**Target Platform**: Linux container. Local development via `docker compose up`, or `scripts/dev-stack.sh` for one isolated, per-worktree stack (parameterised host ports and a worktree-scoped compose project, so concurrent tickets never collide).
 
 **Project Type**: Single backend web service with a Kafka consumer in the same process.
 
@@ -66,7 +66,7 @@ gapless per-program sequence the audit guarantee depends on (research R8).
 | IV. Idempotency and ordering | Exactly-once effect; identity dedupe before staleness; identifier reuse with different content is a typed conflict | PASS | PASS *(after correction)* — `request_record` keyed `(organisation_id, request_id)`; `processed_message` identity table; staleness now applies to snapshots only, since discarding a late *delta* as stale lost capacity silently |
 | V. Authenticated by default | Global auth guard, opt-in public; org-resolved program scope; read separable from write | PASS | PASS *(HTTP)* / **the message stream was not covered** — global `APP_GUARD`, `@Public()` only on health, `ProgramScopeGuard`, per-operation `x-required-scope`, guard order pinned (own→404 before scope→403). The treasury topics had no producer authentication at all; FR-034 and research R11 now require ACLs over SASL_SSL or mTLS |
 | VI. Test-first with concurrency coverage | TDD; 80% coverage; concurrency, idempotency, stale-reconciliation, currency-mismatch tests mandatory | PASS | **DEFERRED — see Complexity Tracking** — the four mandatory tests are enumerated, but test-first is a property of `/speckit-tasks` and the coverage gate is an artifact that does not exist yet |
-| VII. Runnable locally, observable | `docker compose up` + `.env.example`; JSON logs with correlation id; health and metrics; documented assumptions | PASS | PASS — compose stack, seed script, `docs/ASSUMPTIONS.md` as a tracked deliverable |
+| VII. Runnable locally, observable | `docker compose up` + `.env.example`; JSON logs with correlation id; health and metrics; documented assumptions | PASS | PASS — compose stack (per-worktree isolated via `scripts/dev-stack.sh`), seed script, `docs/ASSUMPTIONS.md` as a tracked deliverable |
 
 **Result: PASS on I–V and VII; VI deferred to `/speckit-tasks` with a named gate.**
 
@@ -190,7 +190,8 @@ test/
 ├── migration/                 # up/down applies cleanly — Constitution merge gate
 └── performance/               # SC-002, SC-002a, SC-003, SC-003a — release gate, not per-commit
 
-docker-compose.yml             # Postgres + Redpanda + service
+docker-compose.yml             # Postgres + Redis + Redpanda; host ports parameterised
+scripts/dev-stack.sh           # One isolated stack per worktree — Karst's service entrypoint
 .env.example
 jest.config.ts                 # coverageThreshold.global = 80% — the gate, not the aspiration
 docs/ASSUMPTIONS.md            # FR-022 deliverable, Constitution VII

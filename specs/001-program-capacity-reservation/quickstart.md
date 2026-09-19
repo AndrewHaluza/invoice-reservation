@@ -19,10 +19,43 @@ validation guide — implementation lives in `tasks.md` and the source tree.
 
 ```bash
 cp .env.example .env
-docker compose up -d          # Postgres 16, Redpanda, the service
+docker compose up -d          # Postgres 16, Redis, Redpanda
 npm run migration:run
 npm run seed                  # 2 organisations, 3 programs, FX rates, 2 tokens
+npm run start:dev             # the service, on PORT (3000 by default)
 ```
+
+Every host port the stack publishes is parameterised, and defaults to the canonical one:
+`PG_PORT` (5432), `REDIS_PORT` (6379), `KAFKA_PORT` (9092), `KAFKA_SASL_PORT` (9093),
+`REDPANDA_ADMIN_PORT` (9644). Container-internal ports never move — only the published port does.
+Redpanda advertises the published port on its host-facing listeners, and bootstraps its SASL user
+and topics over a separate in-container listener (`INTERNAL://localhost:19092`), so a host client
+that follows the advertised address reconnects correctly whatever port the stack was given.
+
+### One stack per worktree
+
+`scripts/dev-stack.sh` runs all of the above as one command, and is what Karst starts for a ticket
+(`repositories.service.service.start` in `.karst/karst.yml`). It makes concurrent tickets safe:
+
+- the compose project name is derived from the worktree path, so containers, the network and the
+  `pgdata` volume are namespaced per worktree;
+- the published ports come from Karst's per-ticket port allocation (six slots: `http`, `pg`,
+  `redis`, `kafka`, `kafkaSasl`, `redpandaAdmin`, from the `portRange`);
+- `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `REDIS_URL` and `KAFKA_BROKERS` are derived from those
+  ports unconditionally, so an inherited `.env` cannot silently repoint a ticket at another stack.
+
+```bash
+scripts/dev-stack.sh          # stack + npm ci if needed + migrations + seed + API
+scripts/dev-stack.sh up       # the stack only
+scripts/dev-stack.sh down     # tear THIS worktree's stack down, volumes included
+scripts/dev-stack.sh reap     # remove stacks whose worktree no longer exists
+scripts/dev-stack.sh env      # print the env this worktree resolves to
+```
+
+N worktrees therefore run N complete, independent stacks at once. The script tears its own stack
+down when the API exits (`KARST_KEEP_STACK=1` opts out), but Karst stops a service with an
+untrappable `SIGKILL`, so a stack can outlive its ticket; `reap` — which also runs automatically at
+the start of every `up` — removes any stack whose worktree directory is gone.
 
 The seed prints two bearer tokens: `ACME_TOKEN` (owns programs A and B) and `OTHER_TOKEN` (owns
 program C). Keep both — the cross-tenant check needs them.
@@ -328,5 +361,8 @@ npm run test:perf         # SC-002, SC-002a, SC-003, SC-003a — release gate, n
 ## Shutdown
 
 ```bash
-docker compose down -v
+docker compose down -v        # or, from a worktree: scripts/dev-stack.sh down
 ```
+
+`-v` removes the `pgdata` volume of **this** compose project only, so tearing one worktree's stack
+down never touches another's database.

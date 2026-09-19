@@ -28,6 +28,36 @@ repositories:
       - endpoint
       - auth
       - fx
+    # One ticket = one worktree = one complete docker-compose stack.
+    # scripts/dev-stack.sh derives COMPOSE_PROJECT_NAME from the worktree path
+    # (so containers, network and the pgdata volume are per-ticket) and
+    # publishes every container port on the Karst-allocated host port below.
+    service:
+      start: ./scripts/dev-stack.sh
+      health: http://{host}:{port}/health/ready
+      ports:
+        # Named `http` deliberately: karst's health check resolves the port as
+        # `ports.find(name === 'http') ?? ports[0]`, so this name makes the
+        # health URL independent of the order of this list.
+        - name: http
+          env: PORT
+          default: 3000
+        - name: pg
+          env: PG_PORT
+          default: 5432
+        - name: redis
+          env: REDIS_PORT
+          default: 6379
+        - name: kafka
+          env: KAFKA_PORT
+          default: 9092
+        - name: kafkaSasl
+          env: KAFKA_SASL_PORT
+          default: 9093
+        - name: redpandaAdmin
+          env: REDPANDA_ADMIN_PORT
+          default: 9644
+      dependsOn: []
 approaches:
   - id: rpi
     label: Research → Plan → Implement

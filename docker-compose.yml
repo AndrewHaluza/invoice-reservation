@@ -1,3 +1,7 @@
+# Host ports are parameterised so several ticket worktrees can run this stack
+# side by side. Karst allocates the ports and exports them (see
+# scripts/dev-stack.sh); the defaults below are the baseline/manual values.
+# Container-internal ports never change — only the published host port does.
 services:
   postgres:
     image: postgres:16.10-alpine
@@ -6,7 +10,11 @@ services:
       POSTGRES_PASSWORD: capacity_local_dev
       POSTGRES_DB: capacity
     ports:
-      - "5432:5432"
+      - "${PG_PORT:-5432}:5432"
+    labels:
+      # Read by `scripts/dev-stack.sh reap`: an absent worktree means this stack
+      # is an orphan of a ticket karst SIGKILLed, and can be removed.
+      karst.worktree: "${KARST_WORKTREE:-}"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U capacity -d capacity"]
       interval: 5s
@@ -19,7 +27,11 @@ services:
   redis:
     image: redis:7.4.11-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    labels:
+      # Read by `scripts/dev-stack.sh reap`: an absent worktree means this stack
+      # is an orphan of a ticket karst SIGKILLed, and can be removed.
+      karst.worktree: "${KARST_WORKTREE:-}"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -37,18 +49,26 @@ services:
       - --node-id
       - "0"
       - --check=false
+      # INTERNAL is the container-namespace listener: its advertised address is
+      # reachable from inside the netns, which is where redpanda-init runs. The
+      # PLAINTEXT/SASL listeners advertise the HOST-side port, because their
+      # clients live on the host and must reconnect to the published port.
       - --kafka-addr
-      - PLAINTEXT://0.0.0.0:9092,SASL://0.0.0.0:9093
+      - INTERNAL://0.0.0.0:19092,PLAINTEXT://0.0.0.0:9092,SASL://0.0.0.0:9093
       - --advertise-kafka-addr
-      - PLAINTEXT://localhost:9092,SASL://localhost:9093
+      - INTERNAL://localhost:19092,PLAINTEXT://localhost:${KAFKA_PORT:-9092},SASL://localhost:${KAFKA_SASL_PORT:-9093}
       - --set
       - redpanda.enable_sasl=true
       - --set
       - 'redpanda.superusers=["capacity"]'
     ports:
-      - "9092:9092"
-      - "9093:9093"
-      - "9644:9644"
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_SASL_PORT:-9093}:9093"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
+    labels:
+      # Read by `scripts/dev-stack.sh reap`: an absent worktree means this stack
+      # is an orphan of a ticket karst SIGKILLed, and can be removed.
+      karst.worktree: "${KARST_WORKTREE:-}"
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
       interval: 5s
@@ -68,9 +88,10 @@ services:
       - |
         set -e
         rpk security user create capacity --password capacity_local_dev --mechanism SCRAM-SHA-512 || true
-        rpk topic create treasury.capacity.events -p 3 -r 1 -X brokers=localhost:9092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512 || true
-        rpk topic create treasury.capacity.snapshots -p 3 -r 1 -X brokers=localhost:9092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512 || true
-        rpk topic create treasury.capacity.dlq -p 3 -r 1 -X brokers=localhost:9092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512 || true
+        RPK="rpk topic create -p 3 -r 1 -X brokers=localhost:19092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512"
+        $$RPK treasury.capacity.events || true
+        $$RPK treasury.capacity.snapshots || true
+        $$RPK treasury.capacity.dlq || true
 
 volumes:
   pgdata:
