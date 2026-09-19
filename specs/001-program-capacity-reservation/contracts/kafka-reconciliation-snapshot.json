@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/schemas/treasury/reconciliation-snapshot/1.json",
+  "title": "Treasury Reconciliation Snapshot",
+  "description": "A periodic full-state assertion for one program. Topic: treasury.capacity.snapshots. Produce rights are restricted by ACL to the treasury system's own service identity over SASL_SSL or mTLS; schema validation alone does not establish that a message is authentic. Applied as compensating ledger entries for the difference, decomposed per component, never as an overwrite.",
+  "type": "object",
+  "required": ["messageId", "programId", "version", "effectiveAt", "currency", "creditLimitMinor", "reservedMinor", "acknowledgement"],
+  "additionalProperties": false,
+  "properties": {
+    "messageId": { "type": "string", "minLength": 8, "maxLength": 128 },
+    "programId": { "type": "string", "format": "uuid" },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic per program. A snapshot older than the applied state is ignored. A snapshot whose version EQUALS the applied version but whose content differs is quarantined as VERSION_CONFLICT, never arbitrated."
+    },
+    "effectiveAt": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": "string", "maxLength": 128 },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "MUST equal the program's denomination currency; a mismatch is quarantined."
+    },
+    "creditLimitMinor": {
+      "type": "string",
+      "pattern": "^[0-9]{1,19}$",
+      "description": "The asserted absolute limit. Applied as a signed LIMIT_CHANGE ledger entry for the difference against the current limit, never written directly. A reduction below this service's own reservations is applied and marks the program over-limit; it is not rejected."
+    },
+    "reservedMinor": {
+      "type": "string",
+      "pattern": "^[0-9]{1,19}$",
+      "description": "INCLUSIVE of the reservations this service originated that treasury has ingested and names in the acknowledgement marker below, plus treasury's own bookings. It does NOT include reservations treasury has not yet ingested; those are added on top. Inclusivity is what makes the acknowledgement marker meaningful: were the figure exclusive, an acknowledged reservation would fall out of both terms and vanish from the position."
+    },
+    "acknowledgement": {
+      "type": "object",
+      "description": "Which of this service's reservations the reservedMinor figure already accounts for. REQUIRED: a snapshot without it cannot be applied safely and MUST be quarantined as MISSING_ACK_MARKER, because the additive rule has no way to avoid double-counting.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "reservationIds"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "EXPLICIT" },
+            "reservationIds": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 128 },
+              "maxItems": 10000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "ingestedThrough"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "WATERMARK" },
+            "ingestedThrough": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Treasury has ingested every reservation this service confirmed at or before this instant, compared against invoice_reservation.confirmed_at. A marker is only applied when the snapshot version exceeds the reservation's acknowledged_by_version, so an out-of-order marker cannot flag a reservation an earlier-applied snapshot did not cover."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

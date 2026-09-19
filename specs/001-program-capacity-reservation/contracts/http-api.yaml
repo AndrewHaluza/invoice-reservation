@@ -1,0 +1,571 @@
+openapi: 3.1.0
+info:
+  title: Program Capacity & Invoice Reservation API
+  version: 1.0.0
+  description: >
+    Real-time capacity position for financing programs. Every endpoint except the health probes
+    requires a bearer token. A caller reaches only the programs owned by the organisation its
+    token identifies; anything else resolves to 404, never 403, so the API never reveals whether
+    an out-of-scope program exists.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: capacity
+  - name: audit
+  - name: health
+
+paths:
+  /v1/programs/{programId}/availability:
+    get:
+      tags: [capacity]
+      summary: Current availability for a program
+      description: >
+        Reflects this client's own accepted changes immediately (FR-007b). Treasury-originated
+        changes appear within the bound reported in `treasury.lagSeconds` (FR-007c).
+      operationId: getAvailability
+      x-required-scope: capacity:read
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Current position
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Availability' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/programs/{programId}/reservations:
+    post:
+      tags: [capacity]
+      summary: Reserve capacity for an approved invoice
+      operationId: createReservation
+      x-required-scope: capacity:write
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservationRequest' }
+      responses:
+        '201':
+          description: Reserved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '200':
+          description: Idempotent replay of an earlier identical request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/PositionUnverified' }
+        '409':
+          description: >
+            Refused. `INSUFFICIENT_CAPACITY`, `PROGRAM_OVER_LIMIT`, `IDEMPOTENCY_CONFLICT`,
+            `DUPLICATE_INVOICE`, or `FX_RATE_UNAVAILABLE`. Nothing was applied.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [audit]
+      summary: List reservations for a program
+      operationId: listReservations
+      x-required-scope: capacity:read
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ReservationStatus' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of reservations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Reservation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/programs/{programId}/reservations/{invoiceId}:
+    get:
+      tags: [audit]
+      summary: Fetch one reservation by invoice
+      operationId: getReservation
+      x-required-scope: capacity:read
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: The reservation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/programs/{programId}/reservations/{invoiceId}/releases:
+    post:
+      tags: [capacity]
+      summary: Release capacity on repayment, full or partial
+      description: >
+        The amount is supplied in the invoice's own currency and converted at the rate recorded on
+        the reservation. A release settling the full remainder, or leaving less than one minor
+        unit, releases exactly the remaining reserved amount so the reservation nets to zero.
+      operationId: createRelease
+      x-required-scope: capacity:write
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseRequest' }
+      responses:
+        '201':
+          description: Released
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '200':
+          description: Idempotent replay
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/PositionUnverified' }
+        '409':
+          description: >
+            Refused. `RELEASE_EXCEEDS_RESERVED`, `RESERVATION_TERMINAL`, `CURRENCY_MISMATCH`,
+            or `IDEMPOTENCY_CONFLICT`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/programs/{programId}/reservations/{invoiceId}/cancellation:
+    post:
+      tags: [capacity]
+      summary: Cancel or write off a reservation that will never be funded
+      description: >
+        Returns all remaining reserved capacity. Recorded with a cause distinct from repayment, so
+        an audit can tell a never-funded invoice from a repaid one.
+      operationId: cancelReservation
+      x-required-scope: capacity:write
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancellationRequest' }
+      responses:
+        '201':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '200':
+          description: Idempotent replay
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/PositionUnverified' }
+        '409':
+          description: '`RESERVATION_TERMINAL` or `IDEMPOTENCY_CONFLICT`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/programs/{programId}/ledger:
+    get:
+      tags: [audit]
+      summary: Read a program's capacity ledger
+      description: >
+        Returned in stable sequence order, so reading the pages in order and summing the deltas
+        reproduces the program's reported position exactly.
+      operationId: listLedgerEntries
+      x-required-scope: capacity:audit
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: cause
+          in: query
+          schema: { $ref: '#/components/schemas/LedgerCause' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of ledger entries, possibly empty
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/LedgerEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /health/live:
+    get:
+      tags: [health]
+      security: []
+      summary: Liveness probe
+      operationId: live
+      responses:
+        '200': { description: Process is alive }
+
+  /health/ready:
+    get:
+      tags: [health]
+      security: []
+      summary: Readiness probe
+      description: >
+        Fails when the database is unreachable or the treasury consumer is disconnected. Does NOT
+        fail merely because the consumer is lagging — a lagging service still serves correctly.
+      operationId: ready
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Carries `org` (owning organisation) and `scope`. `capacity:read` for availability,
+        `capacity:write` for reserve/release/cancel, `capacity:audit` for ledger reads.
+
+  parameters:
+    ProgramId:
+      name: programId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        Reusing a key with different content is refused as `IDEMPOTENCY_CONFLICT` — the original
+        outcome is never replayed for a differing request. Retained at least 30 days.
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: false
+      schema: { type: string, maxLength: 128 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  schemas:
+    Money:
+      type: object
+      required: [amountMinor, currency]
+      properties:
+        amountMinor:
+          type: string
+          pattern: '^-?[0-9]+$'
+          description: >
+            Minor units as a decimal string. A string, not a number, because amounts exceed the
+            safe integer range of JSON numbers and must never be parsed as a float.
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+
+    Availability:
+      type: object
+      required: [programId, currency, creditLimit, reserved, available, overLimit, positionChangedAt, treasury, positionVerified, investigationRequired]
+      properties:
+        programId: { type: string, format: uuid }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        creditLimit: { $ref: '#/components/schemas/Money' }
+        reserved:
+          type: object
+          required: [total, local, treasury]
+          properties:
+            total: { $ref: '#/components/schemas/Money' }
+            local: { $ref: '#/components/schemas/Money' }
+            treasury: { $ref: '#/components/schemas/Money' }
+        available:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: >
+            Signed, never floored at zero. A negative figure is the honest magnitude by which the
+            program is over its limit — flooring would conceal exactly what the over-limit state
+            exists to surface.
+        positionVerified:
+          type: boolean
+          description: >
+            False when the treasury stream position for this program is unknown or behind, so the
+            service cannot vouch for the figures. Writes are refused while false.
+        investigationRequired:
+          type: boolean
+          description: >
+            True when the continuous reconciliation check found this service's cached position
+            disagreeing with its own reservations. Figures are served but are under investigation.
+        reconciliationPending:
+          type: boolean
+          description: >
+            True when the last applied snapshot acknowledged a reservation this service has since
+            released, so reserved is known to be over-reported until the next snapshot arrives.
+        overLimit:
+          type: object
+          required: [active]
+          properties:
+            active: { type: boolean }
+            since: { type: [string, 'null'], format: date-time }
+        positionChangedAt:
+          type: string
+          format: date-time
+          description: When this program's position last changed locally.
+        treasury:
+          type: object
+          required: [appliedVersion, lagSeconds]
+          description: Which treasury state the figure includes, and how far behind the stream is.
+          properties:
+            appliedVersion: { type: integer, format: int64 }
+            effectiveAt: { type: [string, 'null'], format: date-time }
+            lagSeconds: { type: number, minimum: 0 }
+
+    ReservationRequest:
+      type: object
+      required: [invoiceId, amount]
+      properties:
+        invoiceId: { type: string, minLength: 1, maxLength: 128 }
+        amount: { $ref: '#/components/schemas/Money' }
+
+    ReleaseRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: In the invoice's currency. A different currency is rejected.
+
+    CancellationRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [CANCELLED, WRITTEN_OFF]
+        note: { type: string, maxLength: 512 }
+
+    ReservationStatus:
+      type: string
+      enum: [ACTIVE, PARTIALLY_RELEASED, FULLY_RELEASED, CANCELLED, WRITTEN_OFF]
+
+    Reservation:
+      type: object
+      required: [invoiceId, programId, status, invoiceAmount, reserved, outstanding]
+      properties:
+        invoiceId: { type: string }
+        programId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ReservationStatus' }
+        invoiceAmount: { $ref: '#/components/schemas/Money' }
+        reserved:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Converted into program currency at reservation time.
+        outstanding:
+          type: object
+          properties:
+            invoice: { $ref: '#/components/schemas/Money' }
+            reserved: { $ref: '#/components/schemas/Money' }
+        fx:
+          type: [object, 'null']
+          properties:
+            rate: { type: string }
+            effectiveAt: { type: string, format: date-time }
+            source: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ReservationResponse:
+      type: object
+      required: [reservation, availability]
+      description: The outcome plus the program's resulting position, so a caller needs no second call.
+      properties:
+        reservation: { $ref: '#/components/schemas/Reservation' }
+        availability: { $ref: '#/components/schemas/Availability' }
+
+    LedgerCause:
+      type: string
+      enum: [RESERVATION, RELEASE, CANCELLATION, WRITE_OFF, TREASURY_EVENT, LIMIT_CHANGE, RECONCILIATION_ADJUSTMENT, OVER_LIMIT_ONSET, OVER_LIMIT_CLEARED]
+
+    LedgerEntry:
+      type: object
+      required: [sequence, delta, component, cause, occurredAt]
+      properties:
+        sequence: { type: integer, format: int64 }
+        delta:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Signed. Positive consumes capacity, negative returns it.
+        component: { type: string, enum: [LOCAL, TREASURY, LIMIT] }
+        cause: { $ref: '#/components/schemas/LedgerCause' }
+        originReference: { type: [string, 'null'] }
+        actor: { type: string }
+        correlationId: { type: string }
+        occurredAt: { type: string, format: date-time }
+
+    Health:
+      type: object
+      required: [status]
+      description: >
+        Deliberately minimal. Names no host, broker, connection string, or version — an unauthenticated
+        probe must not describe the deployment's topology.
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checks:
+          type: object
+          additionalProperties: { type: string, enum: [up, down] }
+
+    Page:
+      type: object
+      required: [nextCursor]
+      description: >
+        Pagination envelope. The concrete `items` array is contributed by the composing schema via
+        allOf, which is where its element type is pinned.
+      properties:
+        nextCursor:
+          type: [string, 'null']
+          description: Opaque keyset cursor. Null on the last page.
+
+    Error:
+      type: object
+      required: [code, message, correlationId]
+      description: Carries no internal state, stack trace, or other tenants' data.
+      properties:
+        code: { type: string }
+        message: { type: string }
+        correlationId: { type: string }
+        details:
+          type: object
+          description: >
+            Field-level validation information only. Never stack traces, SQL, driver messages, or
+            identifiers belonging to another organisation. The contract test fails the build if a
+            `stack`, `sql`, or `query` key ever appears here.
+          additionalProperties:
+            type: string
+          propertyNames:
+            pattern: '^[A-Za-z0-9_.\[\]]+$'
+
+  responses:
+    BadRequest:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: The calling organisation exceeded its request budget
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Seconds to wait before retrying.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PositionUnverified:
+      description: >
+        This program's treasury stream position is unknown or behind, so writes are refused rather
+        than applied against a position the service cannot vouch for. Ownership is resolved before
+        this check, so an out-of-scope program still answers 404.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: >
+        Authenticated, the program is the caller's, but the token lacks the scope this operation
+        requires. Ownership is always resolved first, so this never discloses another
+        organisation's program.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: >
+        The program does not exist, or is not owned by the caller's organisation. Deliberately
+        indistinguishable, so the API never confirms an out-of-scope program exists.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

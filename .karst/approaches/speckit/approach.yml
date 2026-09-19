@@ -1,0 +1,40 @@
+id: speckit
+label: Spec Kit
+description: >-
+  Spec-driven: specify → clarify → plan → tasks → implement, each phase a
+  durable artifact under specs/<feature>/.
+entrypoint: specify
+prompts: []
+artifacts:
+  - kind: command
+    relPath: commands/analyze.md
+  - kind: command
+    relPath: commands/checklist.md
+  - kind: command
+    relPath: commands/clarify.md
+  - kind: command
+    relPath: commands/constitution.md
+  - kind: command
+    relPath: commands/converge.md
+  - kind: command
+    relPath: commands/implement.md
+  - kind: command
+    relPath: commands/plan.md
+  - kind: command
+    relPath: commands/specify.md
+  - kind: command
+    relPath: commands/tasks.md
+  - kind: command
+    relPath: commands/taskstoissues.md
+workflow:
+  - name: describe
+  - name: specify
+    command: /speckit:specify
+  - name: clarify
+    command: /speckit:clarify
+  - name: plan
+    command: /speckit:plan
+  - name: tasks
+    command: /speckit:tasks
+  - name: implement
+    command: /speckit:implement

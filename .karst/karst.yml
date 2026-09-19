@@ -1,0 +1,527 @@
+id: invoice-reservation-068c99b8
+
+# Karst manifest — copy to `karst.yml` and point repoPath at your real repos.
+# Resolved by the `karst.manifestPath` setting (default ./.karst/karst.yml),
+# relative to the workspace root.
+#
+# A REPOSITORY is the primary entity: a git repo karst can worktree, scope to a
+# ticket, classify and ship. Every hot repo's repoPath must be a real git repo
+# containing `baselineBranch`.
+#
+# A SERVICE is an OPTIONAL relation on a repository, describing how to RUN it.
+# Only declare `service:` for repos that actually run a process. When you do,
+# `start` must be a runnable command and its `health` URL must become reachable,
+# or spin fails. A repo with no `service:` is fully first-class: it gets a
+# worktree so the agent can edit it, and karst never starts it, allocates it a
+# port, or health-checks it. Never invent a placeholder command or a fake port
+# just to register a repo — that is exactly what this shape removes.
+#
+# MIGRATION: manifests written before this used a top-level `services:` map with
+# start/health/ports/dependsOn flat on each entry. Those still load — karst
+# translates them in memory and warns — and the next Save from Settings writes
+# the new shape. A file carrying BOTH `services:` and `repositories:` is
+# rejected rather than guessed at.
+
+# `id` scopes this project's tickets, so several IDE windows can each work on a
+# different project without seeing each other's board. Karst stamps a generated
+# one when it scaffolds the file; keep it stable — changing it starts a fresh,
+# empty board. Omit it and Karst derives an id from the workspace path instead
+# (which changes if you move the repo).
+
+host: 127.0.0.1
+
+# Inclusive [min, max] port window Karst allocates ticket-hot ports from.
+# A service may override this with its own `portRange:` (see backend below).
+portRange: [4000, 4100]
+
+# Default branch every worktree is created off, baseline services run from, and
+# pull requests target. A repository may override this with `baselineBranch`.
+baselineBranch: develop
+
+# How the dashboard renders worktree paths: 'relative' (default, to the
+# workspace root — e.g. ./frontend) or 'absolute'.
+worktreePathDisplay: relative
+
+# Agent CLI used for sessions: claude, codex, antigravity, or opencode.
+agentProvider: claude
+
+# Named agent core + model bundles. A ticket, a process role, or
+# `defaultAgentPreset` can reference one by name. Reference a preset in
+# `defaultAgentPreset` below, per process under `processes:`, or per ticket.
+# agentPresets:
+#   fast:
+#     provider: opencode
+#     model: opencode-go/deepseek-v4-flash
+#   deep:
+#     provider: claude
+#     model: claude-opus-5
+#     effort: high
+# defaultAgentPreset: fast
+
+# How long a ticket stays visible on the board after reaching `done` before
+# Karst archives it automatically (Settings → General). The sweep runs
+# periodically, so the delay is approximate, and a done ticket is never
+# archived immediately. Omit for the 3-day default; must be a positive whole
+# number of days.
+archiveDoneAfterDays: 3
+
+# How an AI call recovers when the provider fails it (optional).
+#
+# A TRANSIENT failure — a 429, a 5xx, a dropped connection — is retried on
+# the SAME model, `retries` extra times, sleeping `backoffMs` doubled per
+# attempt with a little jitter. These retries are silent: nothing you chose
+# changed, and they are visible in the Karst output channel with `debug: true`.
+#
+# A provider that REFUSES THE MODEL ITSELF (a 400/404 naming the model id, a
+# decommissioned id) is not retried at all: karst moves straight to the next
+# entry in `fallbackModels`, re-runs the same call there, AND WARNS YOU —
+# a notification names the failed model, why it failed, and what is being
+# tried instead, so a model swap is never silent.
+#
+# An aborted run (you pressed Stop) and a timed-out run are never retried.
+#
+# Your configured model always goes FIRST; a fallback never replaces it. Only
+# fallbacks compatible with the provider making the call are used, and every
+# attempt is metered separately in the token-usage stats.
+#
+# Defaults when this block is absent: retries 2, backoffMs 2000, and NO
+# fallback models — karst never runs a model you did not configure.
+#
+# resilience:
+#   retries: 2            # 0-5, extra attempts on the same model
+#   backoffMs: 2000       # 0-60000, base delay, doubled per attempt
+#   fallbackModels:       # at most 5, tried in order
+#     - opencode-go/mimo-v2.5
+
+# When a ticket is archived, also close its agent terminals whose process has
+# already exited — the dead tabs VS Code keeps with a "Done" suffix (Settings →
+# General). A still-running session is NEVER touched: only exited terminals
+# qualify. Off by default; dead tabs stay until you close them.
+# closeDoneTerminalsWithTicket: false
+
+# Show a ticket's changed files in the IDE's Source Control view — collapsible
+# groups per worktree and per commit — instead of the "Ticket changes" panel
+# (Settings → General). Clicking a file opens the same diff either way. Off by
+# default.
+# diffsInSourceControl: false
+
+repositories:
+  # Single NestJS service. No `service:` relation yet — nothing runs until
+  # Phase 1 (FEAT-1) creates package.json and the compose stack. Karst still
+  # worktrees it, so tickets can edit it; it just starts nothing and owns no port.
+  service:
+    repoPath: /Users/nd/Work/projects/invoice-reservation
+    hasMigrations: true   # TypeORM migrations land in src/migrations/
+    signals: [capacity, reservation, release, ledger, treasury, snapshot, program,
+              invoice, kafka, postgres, migration, nestjs, api, endpoint, auth, fx]
+
+approaches:
+  # `include`/`collect` paths are classified by their well-known layout and
+  # fetched STRUCTURE-PRESERVING (agent-agnostic): `.claude/agents` → agents/,
+  # `.claude/commands` → commands/, `skills/<name>` → skills/<name>/ (a skill IS
+  # its folder). At launch the agent adapter materializes these into the agent's
+  # own format (Claude: a plugin dir), so the session gets REAL dispatchable
+  # agents / slash-commands / skills — not just one prompt.
+  #
+  # `entrypoint` is a BARE name (no .md) that must resolve against what was
+  # collected, or install fails (assertEntrypointResolvable). It resolves to:
+  #   - a skill folder name (skills/<entrypoint>/SKILL.md), OR
+  #   - an agent/command file basename (agents|commands/<entrypoint>.md), OR
+  #   - a flat prompt basename (prompts/<entrypoint>.md) for unclassified paths.
+  - id: rpi
+    label: "Research → Plan → Implement"
+    description: "Scope unclear; API/contract undefined — discover before coding."
+    # Fetch ONLY the rpi subfolder — the repo ROOT .claude/commands ships demo
+    # commands (weather-orchestrator, time-command, …) that would pollute the
+    # plugin. The subfolder ships the real agents + research/plan/implement.
+    # Resolves to commands/research.md (from .claude/commands/rpi).
+    entrypoint: research
+    source: { type: git, repo: shanraisshan/claude-code-best-practice, ref: main,
+              include: [development-workflows/rpi/.claude/agents,
+                        development-workflows/rpi/.claude/commands/rpi] }
+    # Phases in order; `command` is a native slash command to invoke for the
+    # phase (absent = no dispatchable command for that phase). Every command
+    # here MUST resolve to a fetched commands/<name>.md or install fails.
+    workflow:
+      - { name: describe }
+      - { name: research, command: /rpi:research }
+      - { name: plan, command: /rpi:plan }
+      - { name: implement, command: /rpi:implement }
+  # GSD (Get Shit Done) — a spec-driven phase-loop framework. Its npm package
+  # `@opengsd/gsd-core` is a Claude-Code PLUGIN: the skills/agents/commands live
+  # in the package/repo tree, they are NOT scaffolded by running the bin. So use
+  # a `git` source (like the superpowers approaches above) that fetches those
+  # files directly — an `npm` source with `collect: []` runs the CLI in a
+  # throwaway temp dir and gathers nothing, so it installs empty and is now
+  # REJECTED at install ("collected nothing installable"). `entrypoint` resolves
+  # to the fetched skill folder skills/gsd-next/SKILL.md. Add more `include`
+  # globs (e.g. commands/gsd) to load additional artifacts.
+  - id: gsd
+    label: "Get Shit Done"
+    description: "Spec-driven phase loop; heavy research/plan/execute in fresh-context subagents."
+    entrypoint: gsd-next
+    source: { type: git, repo: open-gsd/gsd-core, ref: main,
+              include: [skills/gsd-next] }
+  - id: "superpowers:writing-plans"
+    label: "Write a plan first"
+    description: "Scope known but non-trivial — plan before executing."
+    # Resolves to the skill folder skills/writing-plans/SKILL.md.
+    entrypoint: writing-plans
+    source: { type: git, repo: obra/superpowers, ref: main,
+              include: [skills/writing-plans] }
+    # Phases in order; no `command` because this source ships no slash
+    # commands — each phase is handled manually and reported via `phase`.
+    workflow:
+      - { name: plan }
+      - { name: implement }
+  - id: "superpowers:test-driven-development"
+    label: "TDD"
+    description: "Bug fix or feature with clear acceptance criteria — tests first."
+    # Resolves to the skill folder skills/test-driven-development/SKILL.md.
+    entrypoint: test-driven-development
+    source: { type: git, repo: obra/superpowers, ref: main,
+              include: [skills/test-driven-development] }
+  - id: single-subagent
+    label: "Direct implementation with a subagent"
+    description: "Small, well-scoped change; delegate to one focused subagent."
+    # no source: built-in, no install
+  - id: direct
+    label: "Direct implementation"
+    description: "Small, fully-clear change; just implement."
+    # no source: built-in
+  # GitHub Spec Kit — spec-driven development. Upstream ships its phase prompts
+  # at `templates/commands/*.md`; the `commands` marker in that path classifies
+  # them as COMMANDS, so each lands at commands/<name>.md and becomes a real
+  # slash command `/speckit:<name>`. `entrypoint` resolves to commands/specify.md.
+  #
+  # PREREQUISITE: these prompts drive `.specify/` scaffolding (scripts,
+  # templates, memory/constitution.md) that the spec-kit CLI writes into a repo.
+  # Karst fetches PROMPTS only, and a ticket runs in a WORKTREE — so `.specify/`
+  # must be COMMITTED on the baseline branch of every repository used with this
+  # approach, or the first phase fails looking for its scripts:
+  #   uvx --from git+https://github.com/github/spec-kit specify init --here \
+  #       --force --non-interactive --integration claude
+  - id: speckit
+    label: "Spec Kit"
+    description: "Spec-driven: specify → clarify → plan → tasks → implement, each phase a durable artifact under specs/<feature>/."
+    entrypoint: specify
+    source: { type: git, repo: github/spec-kit, ref: main,
+              include: [templates/commands] }
+    workflow:
+      - { name: describe }
+      - { name: specify, command: /speckit:specify }
+      - { name: clarify, command: /speckit:clarify }
+      - { name: plan, command: /speckit:plan }
+      - { name: tasks, command: /speckit:tasks }
+      - { name: implement, command: /speckit:implement }
+
+# Configured agents per workflow role. `command` is optional (a role can be
+# declared before its runner is wired). `role` below is REQUIRED by validation
+# but read by nothing yet (same D1 "declared but not yet active" status as the
+# commented uat keys below) — it cannot be omitted or commented out, so this is
+# not a mistake to fix, just a fact karst reports at load.
+agents:
+  research: { role: research }
+  plan: { role: plan }
+  implement-fe: { role: implement }
+  implement-be: { role: implement }
+  test: { role: test }
+  review: { role: review }
+
+# Inside AI process assignments (optional). Each inside process — Ticket
+# analysis, UAT test, UAT fix, Review, Review fix, and the PR description —
+# opens its run record with a SNAPSHOT of the agent name, provider and model
+# that actually launched it, resolved ONCE at launch and immutable afterwards
+# (a later Settings edit never rewrites a stored run). ABSENT (the default)
+# resolves every role to its approved default — UAT Agent, UAT Fix Agent,
+# Review Agent, Review Fix Agent, Ticket Analysis Agent, and the
+# ticket-resolved PR-description adapter — using `agentProvider` and
+# `defaultModel` above.
+#
+# `agent` names a profile from the agent POOL — a local file under agentsDir
+# (create one with Settings → Agents → "+ Add agent") or an approach-owned
+# agent. The profile's body is the process's prompt for prompt-BEARING roles:
+# for Ticket analysis, the body drives the description-improve sub-pass (the
+# classify sub-pass is always the built-in analyzer); for uatTester and review,
+# the body drives the headless prompt. Pool membership is checked in Settings
+# (an unknown name shows "unknown profile" inline), not at load, because the
+# pool lives on the filesystem. `agentName` overrides only the display
+# snapshot; blanks keep the defaults. `provider`/`model` beat the ticket and
+# manifest defaults; `enabled: false` turns the assignment off. There is no
+# inline `instructions:` key — the profile body is the only prompt source, so
+# what Settings shows and what runs cannot disagree. A file that still carries
+# one keeps loading; karst reports it at load and drops it on the next
+# Settings save.
+#
+# Wiring notes: the profile body drives the description-improve sub-pass of
+# Ticket analysis — the two-pass Improve flow runs classify (always the
+# built-in analyzer) then improve (the profile body as its prompt, with the
+# project root as cwd so reference lookups resolve). For uatTester and review,
+# the profile body drives those gates' headless prompts. The interactive Fix
+# roles (uatFix / reviewFix) and prDescription consume only the profile's
+# provider/model/name snapshot today, not its body — their prompts are fixed
+# (pr-description) or the session's own (fix).
+#
+# processes:
+#   uatTester:
+#     agent: tester             # a name from the agent pool → its body is the prompt
+#     agentName: My UAT Agent
+#     provider: codex
+#     model: gpt-5.6-sol
+#   uatFix: { provider: codex }
+#   review: { agent: review, provider: antigravity }
+#   reviewFix: { provider: antigravity }
+#   prDescription: { provider: claude, model: claude-haiku-4-5 }
+#   ticketAnalysis: { agent: description-improver, provider: codex, model: gpt-5.6-sol }
+#     # ^ the agent must EXIST in your pool (Settings shows "unknown profile"
+#     # otherwise and the analysis silently keeps the built-in prompt).
+#     # The profile body drives the description-improve pass; approach/repo/type
+#     # classification is always the built-in analyzer.
+
+# UAT gates. Step-by-step runbook for this block and `review:` below (which
+# stage a check belongs to, script vs command gates, the independent-signal
+# rule, failure playbook) sits beside this file: karst.uat-review-setup.md
+#
+# ABSENT (the default) yields the probe pipeline: karst looks for
+# known package.json scripts. Only four keys under `uat:` are read today —
+# `maxFixAttempts`, `gates` (plus per-repository `gates`), `testerVerifier`
+# and `testerObservations`.
+#
+# NOT A NODE PROJECT? Auto-discovery is the ONLY npm-shaped part of gating, and
+# it is skipped entirely the moment you declare `gates:` below — a declared list
+# wins before package.json is even read. A `kind: command` gate needs no
+# package.json and no shell; do NOT write a package.json shim script for karst.
+# Cookbook — drop the pair you need into `uat.gates` / `review.gates`:
+#
+#   python: - { name: test,      kind: command, command: pytest, args: [-q] }
+#           - { name: lint,      kind: command, command: ruff,   args: [check, .] }
+#           - { name: typecheck, kind: command, command: mypy,   args: ['.'] }
+#   rust:   - { name: test,      kind: command, command: cargo,  args: [test] }
+#           - { name: clippy,    kind: command, command: cargo,  args: [clippy, --, -D, warnings] }
+#   go:     - { name: test,      kind: command, command: go,     args: [test, ./...] }
+#           - { name: vet,       kind: command, command: go,     args: [vet, ./...] }
+#   java:   - { name: test,      kind: command, command: ./gradlew, args: [test] }
+#   make:   - { name: test,      kind: command, command: make,   args: [test] }
+#
+# `command` is argv-based and spawned WITHOUT a shell, so there is no quoting
+# surface: every argument is its own `args` entry, and `cargo test && rm -rf /`
+# in a `command` is a missing binary, not a second command. A relative command
+# (`./gradlew`, `.venv/bin/pytest`) resolves against the repository worktree; a
+# bare name (`pytest`) is a PATH lookup, so a virtualenv must already be on the
+# PATH the extension host inherited.
+uat:
+  # WIRED. Fix→UAT→fix retries before the ticket parks. Narrows UAT only; review
+  # has its own `review.maxFixAttempts`.
+  maxFixAttempts: 3
+  # WIRED. Replaces the probe. `kind: command` is argv-based and spawned without
+  # a shell — it is what keeps UAT usable from Go, Rust, Java and Python repos.
+  gates:
+    - { name: test, kind: script, script: test }
+    - { name: e2e, kind: command, command: npx, args: [playwright, test], repo: frontend }
+  # WIRED (Task 8). An optional deterministic verification command for the UAT
+  # Tester's observations, run AFTER the required gates pass. Its COMPLETED exit
+  # code is the sole Tester-specific verdict: 0 completes the Tester, a
+  # completed nonzero exit fails UAT (one Fix round, attributed to the Tester
+  # process), and a command that cannot run parks without spending a round.
+  # Absent → the Tester's observations are advisory and the gates decide alone.
+  testerVerifier: { name: verify-uat, kind: command, command: ./scripts/verify-uat.sh }
+  # WIRED. The ONE knob that turns the UAT Tester's OBSERVATIONS into a verdict.
+  # The DEFAULT is `none` — omit this block (as every existing karst.yml does)
+  # and observations stay purely ADVISORY: they are recorded as evidence, and
+  # they never pass, fail, transition, or spend a Fix round. Set a severity and
+  # every observation at or above it fails UAT with one Tester-attributed Fix
+  # round ("uat tester observations: 1 high"). Same vocabulary as
+  # `review.findings.blockingSeverity`: critical | high | medium | low | info | none.
+  testerObservations: { blockingSeverity: none }
+  repositories:
+    frontend:
+      # WIRED, and it REPLACES the global list for this repository — it is not
+      # additive. A repo listed here runs exactly these gates.
+      gates:
+        - { name: test, kind: script, script: test:unit }
+
+  # ---- NOT YET ACTIVE -------------------------------------------------------
+  # Everything below is validated at load and read by nothing. karst preserves
+  # it across a Settings Save and reports it at load as "declared but not yet
+  # active" (see docs/config-ui-coverage.md, decision D1). Declaring it early is
+  # harmless; expecting it to DO anything is not.
+  #
+  # testDir: e2e
+  # env:
+  #   BASE_URL: http://localhost:3000
+  # secrets: [STRIPE_KEY]        # KEY NAMES ONLY — never values. karst.yml is
+  #                              # committed; a value here is a leaked credential.
+  # passthrough: [HOME, PATH]
+  # origins: [https://api.stripe.com]
+  # authBootstrap: { path: .auth/state.json, secrets: [SESSION_TOKEN] }
+  # author: { agent: uat-author, enabled: true }
+
+# Optional project-wide conventions for the git artifacts KARST ITSELF creates:
+# the ticket's worktree BRANCH (scope stage) and the fallback commit + new pull
+# request (ship stage). Edit them in Settings → Git, which also offers presets.
+# Omit `conventions` (the default) and ship still applies a default PR
+# description template — the agent-generated summary (or resolved PR title) plus
+# the ticket identity and the implementing agent's metadata:
+#   - branch name: karst/{type}/{slug};
+#   - fallback commit message: resolved ticket title;
+#   - PR title: resolved ticket title;
+#   - PR description: "## Summary" over the generated summary, "Ticket" /
+#     "Repository" lines, and a "## Metadata" section naming the implementing
+#     agent's provider, model, approach and session id.
+#
+# Each field is independent. Variables supported by ALL THREE ARTIFACT templates
+# (commitMessage, pullRequestTitle, pullRequestDescription):
+#   {title}  resolved ticket title (title → key → "Ticket <database id>")
+#   {key}    ticket key, or the decimal database id when no key exists
+#   {id}     decimal Karst database id
+#   {repo}   current manifest repository name
+#   {type}   conventional-commit type: the ticket's, else `defaultType`, else feat
+#   {scope}  the repository's `scope:`, else its manifest name
+#
+# pullRequestDescription additionally supports:
+#   {description}  agent-generated summary, falling back to the final PR title
+#   {provider}     implementation agent core: the session that ran impl, else the
+#                  ticket's core pick, else the manifest default (claude)
+#   {model}        implementation model: the ticket's override, else the manifest
+#                  default, else n/a (the agent CLI picks its own)
+#   {approach}     the approach the implementation ran under (n/a when none)
+#   {sessionId}    the agent session id that implemented the ticket (n/a when none)
+#
+# branchName has its OWN vocabulary — {type} {slug} {key} {id} {title} — and must
+# include one of {slug}, {key} or {id} so two tickets can never share a branch.
+# {repo}/{scope} are rejected there: two repository entries sharing a `repoPath`
+# resolve to ONE worktree, so a repo-dependent branch name has no single answer.
+# The rendered value is sanitized into a legal git ref (lowercased, illegal
+# characters folded to dashes). It is rendered ONCE, when the worktree is
+# created: changing this never renames an existing ticket's branch.
+#
+# ANY placeholder, in ANY of these templates, may pipe its value through
+# transforms: {key|slice:-4}. Ticket ids from an external tracker often share a
+# long prefix (869e82530, 869e820e2 differ only in the last four characters), so
+# rendering them whole spends width on characters that distinguish nothing.
+#
+#   slice:START[,END]        exactly String.prototype.slice — negative indices
+#                            count from the end, START >= END gives "", and it
+#                            cuts UTF-16 CODE UNITS (an emoji can be halved)
+#   truncate:WIDTH[,MARKER]  shorten to WIDTH only when longer, marking the cut.
+#                            MARKER defaults to "…" and is INSIDE the budget, so
+#                            the result never exceeds WIDTH. Counts code points.
+#   upper / lower            case the whole value
+#   kebab / snake            lowercase; every non-alphanumeric run becomes one
+#                            "-" / "_" (Unicode-aware: non-Latin letters survive)
+#   trim                     strip leading/trailing whitespace, keep the interior
+#   default:VALUE            replace an EMPTY value (missing field, or "").
+#                            Whitespace-only is NOT empty — use {x|trim|default:…}
+#
+# Chains apply LEFT TO RIGHT: {title|trim|kebab|truncate:24}. Arguments follow
+# ":" and split on ","; only as many commas as the transform takes arguments are
+# split, so the last argument may contain commas ({status|default:none, yet}).
+# Arguments are verbatim — {key|slice: -4} is an ERROR, not -4.
+#
+# Unknown transforms and malformed arguments are rejected WHEN THIS FILE LOADS,
+# naming the placeholder and the reason. Nothing is coerced at render time.
+# A template with no "|" renders exactly as it did before transforms existed.
+#
+# In branchName, transforms apply to the RAW value and git-ref sanitization runs
+# after — so {key|slice:-4} means the same four characters here as everywhere
+# else. Slicing {slug}/{key}/{id} short enough can let two tickets collide on one
+# branch: the uniqueness rule checks WHICH variable is read, not how much of it
+# survives.
+#
+# defaultType supplies {type} for tickets that carry none of their own; a ticket's
+# type is picked (or AI-prefilled) on the ticket form. One of:
+# feat, fix, refactor, docs, test, chore, perf, ci, build, style, revert.
+#
+# `{description}` has a model-cost consequence: Karst asks the configured agent
+# for a summary only when this token is present (the DEFAULT template includes
+# it). A configured description template without `{description}` is deterministic
+# and makes no summary-generation call.
+#
+# Use YAML's `|` block scalar for a readable multiline PR body. Newlines and
+# whitespace are preserved. Complete example:
+#
+# conventions:
+#   branchName: "karst/{type}/{slug}"
+#   defaultType: feat
+#   commitMessage: "{type}({scope}): {title} [{key}]"
+#   pullRequestTitle: "{type}({scope}): {title}"
+#   pullRequestDescription: |
+#     ## Summary
+#     {description}
+#
+#     Ticket: {key}
+#     Repository: {repo}
+#
+#     ## Metadata
+#     Agent: {provider}
+#     Model: {model|default:n/a}
+#     Approach: {approach|default:n/a}
+#     Session: {sessionId|default:n/a}
+#
+# Partial configuration is valid; omitted artifacts keep their exact defaults:
+#
+# conventions:
+#   pullRequestTitle: "[{key}] {title}"
+#
+# The same transforms work in the two label templates below. Shortening a
+# 9-character tracker id to its distinguishing tail buys back five columns in
+# every sidebar row and terminal tab:
+#
+# ticketLabelTemplate: "{key|slice:-4} — {title|truncate:48}"
+# terminalNameTemplate: "Karst: {key|slice:-4}"
+# conventions:
+#   branchName: "karst/{type}/{key|slice:-4}-{slug|truncate:32,}"
+#
+# Scope: commitMessage applies only to Karst's fallback commit when a worktree is
+# dirty. Karst does not rename commits created by an agent or user. PR templates
+# apply only when Karst creates a new PR; an existing PR adopted during ship is
+# never retitled or rewritten. branchName applies only to worktrees created after
+# it is set — an existing worktree keeps the branch recorded on its row.
+
+# Ticketing integration (optional; default { provider: manual }). `manual` is
+# local-only. `clickup` fetches ticket context; set `teamId` (ClickUp workspace
+# id, for custom task ids) and `listId` — the list the Add/Edit ticket page's
+# search dropdown lists (and the list statuses are read from). The API token is
+# NOT stored here — set it in Settings → Ticketing (kept in the OS keychain).
+# `searchEnabled` (default true) turns that dropdown off; it is a Settings
+# toggle.
+ticketing:
+  provider: manual
+  # provider: clickup
+  # teamId: "9001"
+  # listId: "42"
+  # searchEnabled: true
+
+# Review stage gates (optional). Absent yields the default pipeline: karst
+# probes package.json for lint/typecheck/build/format and runs whichever
+# exist. Non-Node repo: declare `gates:` with `kind: command` entries and the
+# package.json probe is never consulted — see the cookbook above `uat:`. `test` is deliberately not among them — UAT already runs it first on
+# the same worktree, so review re-asking it would be the exact duplicated
+# question `requireIndependentSignal` below exists to catch.
+review:
+  # Review's own fix-loop budget; independent of uat.maxFixAttempts.
+  maxFixAttempts: 3
+  # A review whose gates ask nothing UAT didn't already ask has added no
+  # signal — that FAILS to `fix` (not a warning, unlike UAT's own overlap
+  # check) unless you turn it off here.
+  requireIndependentSignal: true
+  # Whether a finished review reveals the ticket's Changes panel for every
+  # affected repository. Off by default — the changes are one click away in
+  # the panel either way.
+  openChanges: false
+  # gates:
+  #   - { name: lint,   kind: script,  script: lint }
+  #   - { name: clippy, kind: command, command: cargo, args: [clippy, --, -D, warnings] }
+  #   - { name: govet,  kind: command, command: go,    args: [vet, ./...], repo: backend }
+  # Per-repository gates REPLACE the global list above for that repo only —
+  # never additive.
+  # repositories:
+  #   backend: { gates: [{ name: lint, kind: script, script: lint:ci }] }
+  # Lane B (Phase 2): an agent reviews the diff and files findings. On by
+  # default, and critical/high findings fail review to `fix` — turn
+  # blockingSeverity down to `none` for advisory-only, or `enabled: false` to
+  # turn the lane off entirely.
+  findings:
+    enabled: true
+    blockingSeverity: high
+    maxFindings: 50

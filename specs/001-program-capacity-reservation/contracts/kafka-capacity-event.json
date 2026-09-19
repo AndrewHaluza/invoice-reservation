@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/schemas/treasury/capacity-event/1.json",
+  "title": "Treasury Capacity Event",
+  "description": "An incremental capacity change asserted by the external treasury system. Topic: treasury.capacity.events. Produce rights are restricted by ACL to the treasury system's own service identity over SASL_SSL or mTLS. Message key SHOULD be the programId so that a partition carries one program's events in order; this is unratified with the treasury team, and correctness does not depend on it, since deltas dedupe by message identity. Only throughput does.",
+  "type": "object",
+  "required": ["messageId", "programId", "version", "effectiveAt", "type", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "description": "Stable identity. Duplicate suppression keys on this. For incremental events this is the ONLY dedupe mechanism."
+    },
+    "programId": { "type": "string", "format": "uuid" },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic per program. Carried for ordering diagnostics and conflict detection ONLY. An incremental event is NEVER discarded for being older than the applied snapshot version: a delta must apply exactly once regardless of arrival order, and discarding one loses capacity permanently with no quarantine and no alert. Staleness suppression applies to snapshots, which assert absolute state. Equal version with differing content is quarantined as VERSION_CONFLICT, not arbitrated."
+    },
+    "effectiveAt": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": "string", "maxLength": 128 },
+    "type": {
+      "type": "string",
+      "enum": ["LIMIT_CHANGED", "RESERVATION_BOOKED", "RESERVATION_RELEASED"]
+    },
+    "payload": {
+      "type": "object",
+      "required": ["amountMinor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amountMinor": {
+          "type": "string",
+          "pattern": "^-?[0-9]{1,19}$",
+          "description": "Minor units as a decimal string. For LIMIT_CHANGED this is the new absolute limit, applied as a signed LIMIT_CHANGE entry for the difference. For the reservation types it is the amount booked or released."
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "MUST equal the program's denomination currency. A mismatch is quarantined and never converted, because the program currency is immutable and existing reservations hold conversions against it."
+        },
+        "reservationReference": {
+          "type": ["string", "null"],
+          "description": "Present on RESERVATION_BOOKED and RESERVATION_RELEASED. Matched against invoice_reservation.treasury_reference: when it names a reservation this service originated, the event is recognised as an echo of our own booking and is skipped rather than applied a second time (FR-010a). Without this the same reservation would be counted once in the LOCAL component and again in TREASURY."
+        }
+      }
+    }
+  }
+}
