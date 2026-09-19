@@ -403,7 +403,10 @@ components:
           properties:
             appliedVersion: { type: integer, format: int64 }
             effectiveAt: { type: [string, 'null'], format: date-time }
-            lagSeconds: { type: number, minimum: 0 }
+            # Null until a stream reader can compute the figure against the
+            # stream head. Null asserts nothing; zero would assert the position
+            # is current, which phase 5 cannot know.
+            lagSeconds: { type: [number, 'null'], minimum: 0 }
 
     ReservationRequest:
       type: object

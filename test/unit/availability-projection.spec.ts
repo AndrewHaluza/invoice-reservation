@@ -21,11 +21,9 @@ function program(overrides: Partial<ProgramEntity> = {}): ProgramEntity {
   });
 }
 
-const now = new Date('2026-01-01T00:01:00.000Z');
-
 describe('toAvailabilityBody', () => {
   it('renders limit, reserved components and signed available as minor-unit strings', () => {
-    const body = toAvailabilityBody(program(), now);
+    const body = toAvailabilityBody(program(), false);
 
     expect(body.creditLimit.amountMinor).toBe('1000000000');
     expect(body.reserved.local.amountMinor).toBe('100000');
@@ -43,7 +41,7 @@ describe('toAvailabilityBody', () => {
         treasuryReservedMinor: 80_000n,
         overLimitSince: since,
       }),
-      now,
+      false,
     );
 
     expect(body.available.amountMinor).toBe('-60000');
@@ -51,29 +49,34 @@ describe('toAvailabilityBody', () => {
     expect(body.overLimit.since).toBe(since.toISOString());
   });
 
-  it('derives lagSeconds from the treasury effective time', () => {
+  it('reports a null lag because no stream head is knowable in phase 5', () => {
     const effectiveAt = new Date('2026-01-01T00:00:30.000Z');
     const body = toAvailabilityBody(
       program({ treasuryEffectiveAt: effectiveAt }),
-      now,
+      false,
     );
 
-    expect(body.treasury.lagSeconds).toBe(30);
+    expect(body.treasury.lagSeconds).toBeNull();
     expect(body.treasury.effectiveAt).toBe(effectiveAt.toISOString());
   });
 
-  it('reports zero lag and a null effective time when treasury is unset', () => {
-    const body = toAvailabilityBody(
-      program({ treasuryEffectiveAt: null }),
-      now,
-    );
+  it('reports a null lag and a null effective time when treasury is unset', () => {
+    const body = toAvailabilityBody(program({ treasuryEffectiveAt: null }), false);
 
-    expect(body.treasury.lagSeconds).toBe(0);
+    expect(body.treasury.lagSeconds).toBeNull();
     expect(body.treasury.effectiveAt).toBeNull();
+    expect(body.treasury.appliedVersion).toBe(0);
+  });
+
+  it('carries the reconciliation flag it is given', () => {
+    expect(toAvailabilityBody(program(), true).reconciliationPending).toBe(true);
+    expect(toAvailabilityBody(program(), false).reconciliationPending).toBe(
+      false,
+    );
   });
 
   it('produces every field the Availability schema marks required', () => {
-    const body = toAvailabilityBody(program(), now) as unknown as Record<
+    const body = toAvailabilityBody(program(), false) as unknown as Record<
       string,
       unknown
     >;

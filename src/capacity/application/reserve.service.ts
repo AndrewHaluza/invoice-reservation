@@ -221,7 +221,7 @@ export class ReserveService {
           reservation: toReservationBody(
             toInvoiceReservationEntity(insertedRow),
           ),
-          availability: toAvailabilityBody(programAfter, now),
+          availability: toAvailabilityBody(programAfter, false),
         };
 
         await this.idempotency.complete(

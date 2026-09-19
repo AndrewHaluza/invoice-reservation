@@ -1,3 +1,9 @@
+import {
+  ProgramPosition,
+  available,
+  isOverLimit,
+  totalReserved,
+} from '../domain/program';
 import { ProgramEntity } from '../infrastructure/entities/program.entity';
 
 export interface MoneyBody {
@@ -17,22 +23,23 @@ export interface AvailabilityBody {
   readonly available: MoneyBody;
   readonly positionVerified: boolean;
   readonly investigationRequired: boolean;
+  readonly reconciliationPending: boolean;
   readonly overLimit: { readonly active: boolean; readonly since: string | null };
   readonly positionChangedAt: string;
   readonly treasury: {
     readonly appliedVersion: number;
     readonly effectiveAt: string | null;
-    readonly lagSeconds: number;
+    readonly lagSeconds: number | null;
   };
 }
 
 export function toAvailabilityBody(
   program: ProgramEntity,
-  now: Date,
+  reconciliationPending: boolean,
 ): AvailabilityBody {
-  const totalReservedMinor =
-    program.localReservedMinor + program.treasuryReservedMinor;
-  const availableMinor = program.creditLimitMinor - totalReservedMinor;
+  const position: ProgramPosition = program;
+  const totalReservedMinor = totalReserved(position);
+  const availableMinor = available(position);
 
   const money = (amountMinor: bigint): MoneyBody => ({
     amountMinor: amountMinor.toString(),
@@ -51,24 +58,19 @@ export function toAvailabilityBody(
     available: money(availableMinor),
     positionVerified: program.positionVerified,
     investigationRequired: program.investigationRequired,
+    reconciliationPending,
     overLimit: {
-      active: totalReservedMinor > program.creditLimitMinor,
+      active: isOverLimit(position),
       since: program.overLimitSince?.toISOString() ?? null,
     },
     positionChangedAt: program.positionChangedAt.toISOString(),
     treasury: {
       appliedVersion: Number(program.treasuryVersion),
       effectiveAt: program.treasuryEffectiveAt?.toISOString() ?? null,
-      // This is an interim derivation. The contract defines lag against the newest message
-      // available on the stream, and no stream high-water mark is recorded until the Phase 7
-      // consumer exists.
-      lagSeconds:
-        program.treasuryEffectiveAt === null
-          ? 0
-          : Math.max(
-              0,
-              (now.getTime() - program.treasuryEffectiveAt.getTime()) / 1000,
-            ),
+      // The contract defines lag against the newest message available on the
+      // stream (FR-007a). No stream head is recorded until the phase 7 consumer
+      // exists, so the figure is not knowable: null, never a fabricated zero.
+      lagSeconds: null,
     },
   };
 }

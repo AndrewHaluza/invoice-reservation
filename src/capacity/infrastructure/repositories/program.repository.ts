@@ -1,11 +1,26 @@
 import { Injectable } from '@nestjs/common';
-import { EntityManager } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { AdvanceResult } from '../../domain/position';
 import { ProgramPosition } from '../../domain/program';
 import { ProgramEntity } from '../entities';
+import { ProgramRow, toProgramEntity } from '../unit-of-work';
 
 @Injectable()
 export class ProgramRepository {
+  // A read path takes no row lock: the position columns are only ever written
+  // inside the locked transaction, so a committed read is consistent on its own.
+  async findById(
+    dataSource: DataSource,
+    programId: string,
+  ): Promise<ProgramEntity | null> {
+    const rows = await dataSource.query<ProgramRow[]>(
+      'SELECT * FROM program WHERE id = $1',
+      [programId],
+    );
+    const row = rows[0];
+    return row === undefined ? null : toProgramEntity(row);
+  }
+
   toPosition(entity: ProgramEntity): ProgramPosition {
     return {
       id: entity.id,
