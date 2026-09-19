@@ -49,7 +49,7 @@ export default [
           default: 'disallow',
           policies: [
             { from: { element: { type: 'domain' } }, allow: [{ to: [{ element: { type: 'domain' } }] }, { to: [{ element: { type: 'shared' } }] }] },
-            { from: { element: { type: 'application' } }, allow: [{ to: [{ element: { type: 'domain' } }] }, { to: [{ element: { type: 'infrastructure' } }] }, { to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'fx' } }] }, { to: [{ element: { type: 'config' } }] }] },
+            { from: { element: { type: 'application' } }, allow: [{ to: [{ element: { type: 'domain' } }] }, { to: [{ element: { type: 'infrastructure' } }] }, { to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'fx' } }] }, { to: [{ element: { type: 'config' } }] }, { to: [{ element: { type: 'observability' } }] }] },
             { from: { element: { type: 'infrastructure' } }, allow: [{ to: [{ element: { type: 'domain' } }] }, { to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'config' } }] }] },
             { from: { element: { type: 'api' } }, allow: [{ to: [{ element: { type: 'application' } }] }, { to: [{ element: { type: 'domain' } }] }, { to: [{ element: { type: 'shared' } }] }] },
             { from: { element: { type: 'treasury' } }, allow: [{ to: [{ element: { type: 'application' } }] }, { to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'config' } }] }, { to: [{ element: { type: 'observability' } }] }] },

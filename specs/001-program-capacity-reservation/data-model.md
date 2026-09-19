@@ -230,7 +230,7 @@ Idempotency, including conflict detection on identifier reuse.
 | `request_id` | `TEXT NOT NULL` | **PK part** — caller-supplied |
 | `operation` | `TEXT NOT NULL` | `RESERVE`, `RELEASE`, `CANCEL` |
 | `content_fingerprint` | `TEXT NOT NULL` | SHA-256 over program, invoice, amount, currency |
-| `state` | `request_state NOT NULL` | `PENDING` or `COMPLETE` |
+| `state` | `request_state NOT NULL` | `PENDING`, `COMPLETE`, or `EXPIRED` |
 | `outcome` | `JSONB NULL` | The response replayed on an exact retry; null while `PENDING` |
 | `recorded_at` | `TIMESTAMPTZ NOT NULL` | |
 
@@ -254,6 +254,13 @@ fingerprint ⇒ `IDEMPOTENCY_CONFLICT`, nothing applied (FR-006a).
 `recorded_at`); only the `outcome` payload is nulled after 30 days (FR-006b). A replay beyond the
 window returns `IDEMPOTENCY_EXPIRED` rather than silently reprocessing. Deleting the row outright
 would make a reused identifier indistinguishable from a new one — the opposite of the stated rule.
+
+The sweep sets `state = 'EXPIRED'` at the same time as it nulls `outcome`. It cannot simply null
+`outcome` on a `COMPLETE` row: `CHECK ((state = 'COMPLETE') = (outcome IS NOT NULL))` would reject
+the update, so the retention rule as originally written was unexecutable. `EXPIRED` satisfies the
+existing CHECK unchanged, because `('EXPIRED' = 'COMPLETE')` and `(NULL IS NOT NULL)` are both
+false. A lookup that finds `EXPIRED` answers `IDEMPOTENCY_EXPIRED`; the identifier and fingerprint
+survive, so a reused key is still never mistaken for a new one.
 
 Spec: Key Entity "Request Record", FR-006–006c.
 

@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 
 export function createThrottlerOptions(
   config: ConfigService,
+  client: Redis,
 ): ThrottlerModuleOptions {
   return {
     throttlers: [
@@ -19,10 +20,6 @@ export function createThrottlerOptions(
         limit: config.getOrThrow<number>('RATE_LIMIT_WRITE_PER_MINUTE'),
       },
     ],
-    storage: new ThrottlerStorageRedisService(
-      new Redis(config.getOrThrow<string>('REDIS_URL'), {
-        maxRetriesPerRequest: 3,
-      }),
-    ),
+    storage: new ThrottlerStorageRedisService(client),
   };
 }
