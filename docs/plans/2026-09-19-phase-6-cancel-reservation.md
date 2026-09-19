@@ -99,6 +99,15 @@ Verification: the spec passes today and must keep passing; it is a regression gu
 
 ### Task 2: `test/integration/cancellation.spec.ts` (T062) — WRITE FIRST, CONFIRM FAILING
 
+**Test-harness fidelity (applies to every contract and integration spec in this phase).** Build the
+app from the **production module graph** — `AppModule`, or a test module that registers the same
+`APP_FILTER`, `APP_GUARD` and global pipes. A harness that imports only the modules under test
+omits the global exception filter and therefore asserts a response pipeline that does not exist in
+production. This is not hypothetical: `test/integration/health.spec.ts` asserts 503 from
+`/health/ready` and passes, while the shipped app returns 500, because that spec's `buildApp`
+imports `AuthModule` + `HealthModule` and never `CapacityModule`, so `APP_FILTER` is absent. Any
+spec asserting a status or an error body must boot the filter, or it is measuring nothing.
+
 Against Testcontainers:
 
 - Cancel an `ACTIVE` reservation → **201**; all remaining capacity returns; ledger cause is `CANCELLATION`;

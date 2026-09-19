@@ -41,6 +41,29 @@ below by reading the repository; if any is false, stop (Executor Rules).
 - `contracts/http-api.yaml` (release endpoint, ~line 162) declares **`201` for a release** and
   `200` for an idempotent replay — the same split as the reservation endpoint.
 
+## Carry-over from phase 3
+
+Found during phase 3 execution, not yet resolved when this plan was written. Re-check each before
+starting; if phase 3 already closed it, say so and move on.
+
+1. **`CapacityErrorFilter` flattens deliberate non-coded `HttpException`s.** Registered globally
+   with `@Catch()`, it rewrites any exception carrying no string `code`. `HealthController.ready()`
+   throws `ServiceUnavailableException({ status: 'degraded', checks })` — no code — so the shipped
+   app answers **500 `INTERNAL`** where `http-api.yaml:288` requires **503** with the `Health`
+   schema. Narrowing the passthrough to 4xx does not fix it, because 503 is 5xx.
+
+   The rule this plan assumes: **an `HttpException` a controller threw deliberately keeps its
+   status and its object body; the filter maps only domain `Result` errors and unknown
+   throwables.** The leak the flattening guarded against is Terminus's raw indicator details, and
+   `ready()` already catches and sanitises those before re-throwing, so nothing unsanitised reaches
+   the filter. If phase 3 instead resolved this by widening a status range, the release error
+   mapping in Task 4 still works, but expect phase 9's T094 to fail on the health probe.
+
+2. **`test/integration/health.spec.ts` cannot observe the above.** Its `buildApp` imports
+   `TestConfigModule`, `TypeOrmModule`, `AuthModule` and `HealthModule` — never `CapacityModule` —
+   so `APP_FILTER` is absent and the spec asserts 503 while production returns 500. Every contract
+   spec in this phase boots the production module graph for that reason (see Task 7).
+
 ## Target State
 
 - A release of the invoice's full remaining amount leaves `outstanding_invoice_minor = 0` **and**
@@ -203,6 +226,15 @@ only from that spelling and returns `true` for any other, silently disabling the
 Verification: a caller without `capacity:write` gets 403; a foreign program id gets 404.
 
 ### Task 7: `test/contract/releases.contract.spec.ts` (T049)
+
+**Test-harness fidelity (applies to every contract and integration spec in this phase).** Build the
+app from the **production module graph** — `AppModule`, or a test module that registers the same
+`APP_FILTER`, `APP_GUARD` and global pipes. A harness that imports only the modules under test
+omits the global exception filter and therefore asserts a response pipeline that does not exist in
+production. This is not hypothetical: `test/integration/health.spec.ts` asserts 503 from
+`/health/ready` and passes, while the shipped app returns 500, because that spec's `buildApp`
+imports `AuthModule` + `HealthModule` and never `CapacityModule`, so `APP_FILTER` is absent. Any
+spec asserting a status or an error body must boot the filter, or it is measuring nothing.
 
 Assert the wire contract: **201** on a fresh release carrying `reservation` + `availability`, and
 **200** on an idempotent replay with an identical body (`contracts/http-api.yaml`); 409

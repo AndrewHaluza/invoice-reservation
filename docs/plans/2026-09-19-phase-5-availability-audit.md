@@ -135,6 +135,15 @@ defect in the phase 2 migration or seed — stop and report it; do not paper ove
 
 ### Task 3: `test/contract/availability.contract.spec.ts` (T056) — WRITE FIRST
 
+**Test-harness fidelity (applies to every contract and integration spec in this phase).** Build the
+app from the **production module graph** — `AppModule`, or a test module that registers the same
+`APP_FILTER`, `APP_GUARD` and global pipes. A harness that imports only the modules under test
+omits the global exception filter and therefore asserts a response pipeline that does not exist in
+production. This is not hypothetical: `test/integration/health.spec.ts` asserts 503 from
+`/health/ready` and passes, while the shipped app returns 500, because that spec's `buildApp`
+imports `AuthModule` + `HealthModule` and never `CapacityModule`, so `APP_FILTER` is absent. Any
+spec asserting a status or an error body must boot the filter, or it is measuring nothing.
+
 Assert the response shape field by field, including: `available.amountMinor` is a **signed** string;
 an over-limit program reports a negative value; `positionChangedAt` is ISO-8601; the `treasury`
 object is **present and non-null** with `appliedVersion: 0`, `effectiveAt: null` and

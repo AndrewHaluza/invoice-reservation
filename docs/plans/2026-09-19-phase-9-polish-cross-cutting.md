@@ -154,8 +154,21 @@ exclude it from the default run the same way Task 7 excludes the performance spe
 
 Enumerate every registered route from the Nest router and assert each one: 401 unauthenticated;
 403 with a token lacking the route's scope; and that no error body's `details` contains a `stack`,
-`sql` or `query` key. The only exceptions are the two health probes declared `security: []`
+`sql` or `query` key — **at every status, 5xx included**, since a flattened 500 is exactly where
+internals leak. The only auth exemptions are the two health probes declared `security: []`
 (SC-007). A newly added route with no scope must fail this test.
+
+**Boot the full `AppModule`.** A harness that assembles a subset of modules leaves out
+`APP_FILTER` and asserts a pipeline that is not the one shipped — see the health-probe case below.
+
+**Assert the health probes too, rather than only exempting them.** They are exempt from *auth*
+(`security: []`), not from the contract: `/health/live` returns 200, and `/health/ready` returns
+either 200 or **503** carrying the `Health` schema (`http-api.yaml:279-297`). `ready()` throws a
+`ServiceUnavailableException` with an object body and no string `code`; a global filter that
+flattens non-coded exceptions turns that into 500 `INTERNAL`, breaking the contract on the endpoint
+orchestrators use to route traffic. `test/integration/health.spec.ts` cannot catch it — its
+`buildApp` omits `CapacityModule`, so the filter is never in the pipeline it tests. Assert the 503
+under the full module graph here.
 
 **Plus the SC-007a non-disclosure assertion, which is the part most easily missed:** for each
 program-scoped route, a request naming a program owned by **another organisation** and a request
