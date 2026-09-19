@@ -5,6 +5,7 @@ import { CachedRateProvider } from '../fx/cached-rate.provider';
 import { CapacityController } from './api/capacity.controller';
 import { CapacityErrorFilter } from './api/error.filter';
 import { IdempotencyService } from './application/idempotency.service';
+import { ReleaseService } from './application/release.service';
 import { ReserveService } from './application/reserve.service';
 import { LedgerRepository } from './infrastructure/repositories/ledger.repository';
 import { ProgramRepository } from './infrastructure/repositories/program.repository';
@@ -18,6 +19,7 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
     LedgerRepository,
     IdempotencyService,
     ReserveService,
+    ReleaseService,
     { provide: FX_RATE_PROVIDER, useClass: CachedRateProvider },
     { provide: APP_FILTER, useClass: CapacityErrorFilter },
   ],

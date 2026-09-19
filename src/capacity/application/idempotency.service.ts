@@ -35,6 +35,7 @@ export function reserveFingerprint(input: {
 }
 
 interface RequestRecordRow {
+  operation: 'RESERVE' | 'RELEASE' | 'CANCEL';
   state: 'PENDING' | 'COMPLETE' | 'EXPIRED';
   content_fingerprint: string;
   outcome: Record<string, unknown> | null;
@@ -67,7 +68,7 @@ export class IdempotencyService {
     }
 
     const rows = await manager.query<RequestRecordRow[]>(
-      `SELECT state, content_fingerprint, outcome
+      `SELECT operation, state, content_fingerprint, outcome
          FROM request_record
         WHERE organisation_id = $1 AND request_id = $2`,
       [identity.organisationId, identity.requestId],
@@ -77,7 +78,12 @@ export class IdempotencyService {
       throw new Error('request_record row vanished during idempotency lookup');
     }
 
-    if (row.content_fingerprint !== identity.fingerprint) {
+    // The operation is part of the identity: a key first used to reserve must
+    // not replay a release (or vice versa), even when the content matches.
+    if (
+      row.operation !== identity.operation ||
+      row.content_fingerprint !== identity.fingerprint
+    ) {
       return { kind: 'refused', code: 'IDEMPOTENCY_CONFLICT' };
     }
 

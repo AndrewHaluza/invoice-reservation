@@ -13,7 +13,9 @@ import { SkipThrottle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { currentCorrelationId } from '../../shared/correlation';
 import { RequiredScope } from '../../shared/scope';
+import { ReleaseBody, ReleaseService } from '../application/release.service';
 import { ReserveBody, ReserveService } from '../application/reserve.service';
+import { CreateReleaseDto } from './dto/create-release.dto';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 // The global guard chain resolves ownership for the route parameter named exactly
@@ -30,7 +32,10 @@ type ReservationRequest = Request & {
 // limit on every route would silently be the tighter of the two.
 @SkipThrottle({ read: true })
 export class CapacityController {
-  constructor(private readonly reserveService: ReserveService) {}
+  constructor(
+    private readonly reserveService: ReserveService,
+    private readonly releaseService: ReleaseService,
+  ) {}
 
   @Post()
   @RequiredScope('capacity:write')
@@ -59,6 +64,43 @@ export class CapacityController {
       requestId: idempotencyKey,
       invoiceId: dto.invoiceId,
       amountMinor: BigInt(dto.amount.amountMinor),
+      currency: dto.amount.currency,
+      actor: request.auth.org,
+      correlationId: currentCorrelationId() ?? 'unknown',
+    });
+
+    response.status(outcome.created ? 201 : 200);
+    return outcome.body;
+  }
+
+  @Post(':invoiceId/releases')
+  @RequiredScope('capacity:write')
+  async createRelease(
+    @Param('programId', new ParseUUIDPipe({ version: '4' })) programId: string,
+    @Param('invoiceId') invoiceId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: CreateReleaseDto,
+    @Req() request: ReservationRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ReleaseBody> {
+    if (
+      idempotencyKey === undefined ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 128
+    ) {
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'Idempotency-Key is required.',
+        details: { 'Idempotency-Key': 'required, 8 to 128 characters' },
+      });
+    }
+
+    const outcome = await this.releaseService.release({
+      organisationId: request.auth.org,
+      programId,
+      requestId: idempotencyKey,
+      invoiceId,
+      releaseMinor: BigInt(dto.amount.amountMinor),
       currency: dto.amount.currency,
       actor: request.auth.org,
       correlationId: currentCorrelationId() ?? 'unknown',

@@ -106,6 +106,21 @@ describe('IdempotencyService', () => {
     expect(decision).toEqual({ kind: 'refused', code: 'IDEMPOTENCY_CONFLICT' });
   });
 
+  it('refuses the same fingerprint under a different operation', async () => {
+    await service.begin(ds.manager, identity('req-operation', 'fp-op'), new Date());
+    await service.complete(ds.manager, identity('req-operation', 'fp-op'), {
+      ok: true,
+    });
+
+    const decision = await service.begin(
+      ds.manager,
+      { ...identity('req-operation', 'fp-op'), operation: 'RELEASE' },
+      new Date(),
+    );
+
+    expect(decision).toEqual({ kind: 'refused', code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
   it('refuses a row left PENDING by a committed transaction as REQUEST_IN_FLIGHT', async () => {
     await ds.query(
       `INSERT INTO request_record

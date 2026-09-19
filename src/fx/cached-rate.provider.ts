@@ -9,14 +9,16 @@ interface FxRateRow {
   source: string;
 }
 
+interface Entry {
+  readonly value: FxRate;
+  readonly expiresAt: number;
+}
+
 const CACHE_TTL_MS = 60_000;
 
 @Injectable()
 export class CachedRateProvider implements FxRateProvider {
-  private readonly cache = new Map<
-    string,
-    { value: FxRate; expiresAt: number }
-  >();
+  private readonly cache = new Map<string, Entry>();
 
   constructor(private readonly dataSource: DataSource) {}
 
@@ -29,7 +31,15 @@ export class CachedRateProvider implements FxRateProvider {
     const now = Date.now();
     const cached = this.cache.get(key);
 
-    if (cached !== undefined && cached.expiresAt > now) {
+    // The entry answers for the `asOf` it is asked about, not the one that
+    // populated it: it is served only while it is still effective at `asOf`.
+    // A backdated `asOf` falls through to the parameterised query instead of
+    // receiving a rate that had not taken effect yet.
+    if (
+      cached !== undefined &&
+      cached.expiresAt > now &&
+      asOf.getTime() >= cached.value.effectiveAt.getTime()
+    ) {
       return cached.value;
     }
 
@@ -54,7 +64,15 @@ export class CachedRateProvider implements FxRateProvider {
       source: row.source,
     };
 
-    this.cache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
+    // A historical lookup must never displace the hot entry: cache the result
+    // only when it is at least as new as what the entry already holds.
+    if (
+      cached === undefined ||
+      value.effectiveAt.getTime() >= cached.value.effectiveAt.getTime()
+    ) {
+      this.cache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
+    }
+
     return value;
   }
 

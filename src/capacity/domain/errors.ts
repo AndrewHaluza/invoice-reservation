@@ -7,7 +7,12 @@ export type RefusalCode =
   | 'DUPLICATE_INVOICE'
   | 'IDEMPOTENCY_CONFLICT'
   | 'IDEMPOTENCY_EXPIRED'
-  | 'REQUEST_IN_FLIGHT';
+  | 'REQUEST_IN_FLIGHT'
+  | 'INVALID_AMOUNT'
+  | 'CURRENCY_MISMATCH'
+  | 'RESERVATION_TERMINAL'
+  | 'RELEASE_EXCEEDS_RESERVED'
+  | 'NOT_FOUND';
 
 /** A refusal that changed nothing. Carries no internal state. */
 export class CapacityRefusal extends Error {
