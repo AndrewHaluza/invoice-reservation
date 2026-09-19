@@ -260,6 +260,8 @@ Single NestJS service. `src/` and `test/` at repository root, per plan.md's Proj
 - [ ] T098 Run the full `quickstart.md` — all ten scenarios — against a fresh `docker compose up`, confirming a working service inside 10 minutes from clone (SC-008)
 - [ ] T099 Verify `npm run test:cov` reports ≥ 80% and that the T004 threshold fails the build when it does not. Confirm every subsystem has a test home: `auth/`, `fx/`, `treasury/dlq/`, `observability/`, `config/`, `migrations/`
 - [ ] T100 Remove the Sync Impact Report HTML comment from `.specify/memory/constitution.md` before the first commit — it is temporary review scratch, not governance content
+- [ ] T101 Implement the FR-006b retention sweep in `src/capacity/application/request-retention.job.ts`: past the configured window (default 30 days), null a `request_record`'s `outcome` **while keeping the row** — the PK `(organisation_id, request_id)`, content fingerprint and owning organisation persist indefinitely, so a reused identifier answers `IDEMPOTENCY_EXPIRED` instead of being mistaken for a new request. Never age out a `PENDING` row whatever its age. T042 already reads this state; nothing produced it until now. Add the window as an env var in `env.schema.ts` **and** `.env.example`. Write `test/integration/idempotency-retention.spec.ts` (FR-006b, FR-006c)
+- [ ] T102 Extend `scripts/verify-uat.sh` to the phase 3–8 acceptance criteria, keeping the existing `.env.example` ↔ `env.schema.ts` equality assertion and the no-Docker rule. The script today encodes **phase 1 only**, so the gate keeps passing while measuring nothing of the eight phases built after it
 
 ---
 
@@ -275,7 +277,7 @@ Single NestJS service. `src/` and `test/` at repository root, per plan.md's Proj
 - **US3 (Phase 6)**: Depends on US1
 - **US5 (Phase 7)**: Depends on Foundational; independent of US1–US4 except for echo suppression (T078), which needs US1's reservation rows
 - **US6 (Phase 8)**: Depends on US5 (shares the consumer, DLQ and dedupe) and on US1 (the additive rule needs local reservations to be additive over)
-- **Polish (Phase 9)**: Depends on all stories
+- **Polish (Phase 9)**: Depends on all stories. T101 (FR-006b retention) and T102 (UAT verifier) were added after the initial generation — T101 closes a requirement no phase had scheduled, T102 closes a gate that measured only phase 1
 
 ### Within Each User Story
 

@@ -55,7 +55,7 @@ fact below by reading the repository; if any is false, stop.
 - Read routes on `CapacityController` (T059) and a new `src/capacity/api/audit.controller.ts` (T060)
 - `scripts/audit-ledger.ts` + `npm run audit:ledger` (T061)
 - Tests T054, T055, T056
-- `docs/ASSUMPTIONS.md` entries: reads go to the primary; the FR-007a lag substitute
+- `docs/ASSUMPTIONS.md` entries: reads go to the primary; `lagSeconds` null until phase 7
 
 ### Out of Scope
 
@@ -70,38 +70,23 @@ fact below by reading the repository; if any is false, stop.
 2. **Reads go to the primary.** FR-007b requires a client to see its own accepted change immediately;
    a read replica breaks that. This is recorded in `docs/ASSUMPTIONS.md` as a standing constraint,
    not left implicit in the connection config.
-3. **⚠ FR-007a is NOT met by this phase, and that needs ratifying before execution.** FR-007a
-   defines lag against the **newest message available on the stream**. Phase 5 has no stream
-   reader, so it cannot compute that figure at all. The contract makes silence impossible:
-   `treasury` is a **required** object whose own `required` list is `[appliedVersion, lagSeconds]`,
-   with `lagSeconds` typed `number, minimum: 0` — **not nullable** (`http-api.yaml:398-406`). So
-   this phase must emit *some* number while being unable to emit the right one.
-
-   This plan does **not** get to decide that unilaterally — Executor Rule 8 forbids reinterpreting
-   a product requirement. Two admissible resolutions, and someone with authority picks one before
-   Task 4 starts:
-
-   - **(A) Ship the substitute now.** `lagSeconds = max(0, (now − treasuryEffectiveAt)/1000)`, `0`
-     when no treasury state has applied; phase 7 replaces it with the stream-head computation.
-     FR-007a is knowingly unmet for the phase-5→7 window, recorded in `docs/ASSUMPTIONS.md`.
-   - **(B) Re-sequence.** Move the `treasury` block of the availability response to phase 7 and
-     amend the contract to make it optional until then, so nothing ever reports a figure FR-007a
-     would call wrong.
-
-   Until that call is made, treat this as a **stop-and-ask**, not an executor decision. The rest of
-   the phase does not depend on it and can proceed.
+3. **`lagSeconds` is null until a stream reader exists — RATIFIED.** FR-007a defines lag against
+   the newest message on the stream, which phase 5 cannot compute. `contracts/http-api.yaml` has
+   been amended so `lagSeconds` is `type: [number, 'null']`: **null means the lag is not knowable**,
+   and is never the same as zero. Zero asserts the position is current; null asserts nothing. Phase
+   5 therefore emits null unconditionally and phase 7 supplies the real figure once the consumer
+   knows the stream head. No wall-clock substitute is computed — reporting a fabricated zero for a
+   program treasury has never reached is the one answer that would be actively misleading.
 4. **Availability reads take no row lock.** A plain `SELECT` of the program row is enough; the
    position columns are only ever written inside the locked transaction, so a committed read is
    consistent. Taking `FOR UPDATE` on a read path would serialise reads behind writes and fail SC-003.
 5. **Paging is a cursor over `sequence DESC`, not `occurred_at`.** `sequence` is gapless and totally
    ordered per program, so the cursor is deterministic on ties; `occurred_at` is not unique and would
    skip or repeat rows (FR-031).
-6. **The `treasury` object is never null, per the contract.** `appliedVersion` is
-   `program.treasury_version` (`BIGINT NOT NULL DEFAULT 0`, so `0` before any treasury state — not
-   null); `effectiveAt` is `program.treasury_effective_at` and **is** nullable; `lagSeconds` is a
-   non-null `number >= 0` under resolution (A) above. Computing lag from `positionChangedAt`
-   instead would report zero lag for a program treasury has never reached, which is the one answer
-   that is definitely wrong.
+6. **The `treasury` object itself is never null**, though two of its fields are. `appliedVersion`
+   is `program.treasury_version` (`BIGINT NOT NULL DEFAULT 0`, so `0` before any treasury state —
+   not null); `effectiveAt` is `program.treasury_effective_at` and is nullable; `lagSeconds` is
+   null in this phase per Key Decision 3.
 7. **Three health flags are reported, not derived by the client.** All three come straight from the
    program row; the basis for exposing them on a read is **FR-019f** ("its finding MUST be visible …
    on the availability response"). FR-019e is the separate *write-refusal* rule for
@@ -132,9 +117,9 @@ write budget of 120/min this spec would otherwise take over an hour and start re
 before trial 10,000 — the throttle, not the limit, is what breaks it. The override belongs to the
 test harness only; the production guards stay registered.
 
-Add to `docs/ASSUMPTIONS.md` in the same task: reads go to the primary, and — if resolution (A) was
-ratified — that `lagSeconds` is a wall-clock substitute for FR-007a until phase 7 supplies the
-stream head.
+Add to `docs/ASSUMPTIONS.md` in the same task: reads go to the primary, and `lagSeconds` is null
+until phase 7 supplies the stream head (FR-007a is satisfied by the nullable contract, not by a
+substitute figure).
 
 Verification: the spec fails today only if the endpoint is missing — confirm that failure mode before
 writing the implementation.
@@ -152,8 +137,9 @@ defect in the phase 2 migration or seed — stop and report it; do not paper ove
 
 Assert the response shape field by field, including: `available.amountMinor` is a **signed** string;
 an over-limit program reports a negative value; `positionChangedAt` is ISO-8601; the `treasury`
-object is **present and non-null** with `appliedVersion: 0` and a non-null `lagSeconds >= 0` before
-any treasury state exists, and `effectiveAt: null` in that case; `positionVerified` and
+object is **present and non-null** with `appliedVersion: 0`, `effectiveAt: null` and
+`lagSeconds: null` before any treasury state exists — assert null explicitly, since a `0` here
+would be a false claim of currency; `positionVerified` and
 `investigationRequired` are present booleans; `reconciliationPending` is a boolean when present;
 403 without `capacity:read`; 404 for a foreign program. Validate the response against the
 `Availability` schema rather than asserting field-by-field only.
@@ -163,8 +149,7 @@ any treasury state exists, and `effectiveAt: null` in that case; `positionVerifi
 `src/capacity/application/availability.service.ts` returning a single readonly view matching the
 `Availability` schema field for field. Pure assembly — no lock, no write. Use the domain helpers
 `totalReserved`, `available`, `isOverLimit` rather than re-deriving arithmetic. Derive
-`reconciliationPending` per Key Decision 9. Emit the `treasury` object per Key Decision 6, under
-whichever FR-007a resolution was ratified.
+`reconciliationPending` per Key Decision 9 and emit the `treasury` object per Key Decisions 3 and 6.
 
 Verification: `npx jest test/contract/availability.contract.spec.ts` passes once Task 6 wires the
 route; `npm run lint` clean.

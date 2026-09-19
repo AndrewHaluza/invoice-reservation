@@ -1,4 +1,4 @@
-# Execution Plan: Phase 9 — Polish & cross-cutting concerns (T090–T100)
+# Execution Plan: Phase 9 — Polish & cross-cutting concerns (T090–T102)
 
 ## Goal
 
@@ -50,18 +50,18 @@ behind. Re-verify each fact below by reading the repository; if any is false, st
 
 ### In Scope
 
-T090–T100: the reconciliation job and its manual script, recovery detection, the recovery test, the
+T090–T102: the reconciliation job and its manual script, recovery detection, the recovery test, the
 auth-enumeration contract test, the performance harnesses, `docs/ASSUMPTIONS.md`, the Kafka topic
 ACLs, the quickstart run, the coverage audit, and removing the constitution's scratch comment.
 
-**Plus two items with no task id.** First, **FR-006b's retention sweep** (Task 13) — the global
-coverage sweep found it orphaned: phase 3 deferred it here, tasks.md never numbered it, and T042
-already depends on its effect. Without it a ratified MUST is realised by no plan at all. Second,
-**extending `scripts/verify-uat.sh` to phases 3–8** (Task 9 below).
-`grep -n verify-uat specs/001-program-capacity-reservation/tasks.md` returns nothing — tasks.md has
-no T-number for it, which is itself the gap: the phase-1 verifier would otherwise keep passing over
-a system eight phases larger. It is carried here deliberately and flagged as beyond T090–T100, not
-smuggled in. If it is instead assigned a task id in tasks.md, renumber accordingly.
+**T101 and T102 were added to tasks.md after the initial spec-kit generation** and are in scope
+here:
+
+- **T101 — the FR-006b retention sweep** (Task 13). The coverage sweep found it orphaned across all
+  nine plans: phase 3 deferred it here, tasks.md never numbered it, and T042 already depends on its
+  effect, so `IDEMPOTENCY_EXPIRED` was unreachable and `request_record` grew without bound.
+- **T102 — extending `scripts/verify-uat.sh` to phases 3–8** (Task 9). The phase-1 verifier would
+  otherwise keep passing over a system eight phases larger.
 
 ### Out of Scope
 
@@ -91,8 +91,9 @@ smuggled in. If it is instead assigned a task id in tasks.md, renumber according
    regresses.
 6. **FR-006b is enforced here or nowhere.** Phase 3 deliberately deferred the retention sweep and
    made the `EXPIRED` state representable; T042 already *reads* the outcome-nulled case to answer
-   `IDEMPOTENCY_EXPIRED`. No task in tasks.md ever schedules the ageing that produces it — see
-   Task 13.
+   `IDEMPOTENCY_EXPIRED`. T101 now schedules the ageing that produces it (Task 13). The sweep
+   **nulls the outcome and keeps the row** — deleting it outright would make a reused identifier
+   indistinguishable from a new one, which is the failure FR-006b names explicitly.
 7. **`verify-uat.sh` is extended per phase or it measures nothing.** Add the phase 3–8 criteria as
    their own sections rather than leaving the phase 1 gate passing over a much larger system.
 
@@ -184,20 +185,20 @@ Configuration and documentation for both treasury topics and the DLQ: produce re
 treasury identity; consume restricted to this service; DLQ read restricted to operations tooling;
 replay routed through the ordinary validation path, never injected past it (FR-034, FR-036, R11).
 
-### Task 9: Extend `scripts/verify-uat.sh` (no task id — see Scope)
+### Task 9: Extend `scripts/verify-uat.sh` (T102)
 
 Add the phase 3–8 acceptance criteria as their own sections, keeping the existing `.env.example` ↔
 `env.schema.ts` equality assertion. The script still must not start Docker; it asserts what can be
 asserted statically and names what it cannot.
 
-### Task 13: The request-record retention sweep (FR-006b — no task id, see Scope)
+### Task 13: The request-record retention sweep (T101)
 
-`grep -rn "retention\|sweep" specs/001-program-capacity-reservation/tasks.md` finds only T042,
-which **consumes** the aged-out state (`outcome` nulled by retention → `IDEMPOTENCY_EXPIRED`).
-Nothing anywhere produces it. Phase 3 deferred the sweep here explicitly; tasks.md never gave it a
-number. Without it `IDEMPOTENCY_EXPIRED` is dead code and `request_record` grows without bound.
+Before T101 existed, the only mention of retention in tasks.md was T042, which **consumes** the
+aged-out state (`outcome` nulled by retention → `IDEMPOTENCY_EXPIRED`) while nothing produced it.
+Phase 3 deferred the sweep here explicitly. Without it `IDEMPOTENCY_EXPIRED` is dead code and
+`request_record` grows without bound.
 
-Implement a scheduled sweep that, for records older than the configured retention window
+Implement a scheduled sweep in `src/capacity/application/request-retention.job.ts` that, for records older than the configured retention window
 (default 30 days, an env var added to `env.schema.ts` **and** `.env.example`):
 
 - nulls `outcome` and its content fingerprint payload, **keeping the row** — the PK

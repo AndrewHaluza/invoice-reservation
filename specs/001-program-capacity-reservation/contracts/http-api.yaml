@@ -403,7 +403,15 @@ components:
           properties:
             appliedVersion: { type: integer, format: int64 }
             effectiveAt: { type: [string, 'null'], format: date-time }
-            lagSeconds: { type: number, minimum: 0 }
+            lagSeconds:
+              type: [number, 'null']
+              minimum: 0
+              description: >
+                Seconds between this program's applied treasury effective time and the newest
+                message available on the stream (FR-007a). Null means the lag is not yet
+                knowable — no treasury state has ever applied to this program, or the service
+                has no stream reader. Null is never the same as zero: zero asserts the position
+                is current, null asserts nothing.
 
     ReservationRequest:
       type: object

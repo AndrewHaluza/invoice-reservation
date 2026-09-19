@@ -38,6 +38,7 @@ topic, partition, offset, and correlation id.
 | `CURRENCY_MISMATCH` | Asserts a currency other than the program's own. Never converted; the program currency is immutable. |
 | `MISSING_ACK_MARKER` | A snapshot with no acknowledgement marker. The additive rule cannot be applied safely without one. |
 | `VERSION_CONFLICT` | Version equals the applied state but content differs. Applies to **both** snapshots and incremental events. Quarantined rather than arbitrated. |
+| `SNAPSHOT_INCONSISTENT` | A snapshot whose acknowledgement marker covers more than its own reported `reservedMinor`, so the decomposition's `target_treasury` would be negative. The snapshot contradicts itself; it is never applied, and the program is left untouched for operator review. |
 | `IMPLAUSIBLE_DELTA` | A snapshot implies a treasury correction above half the program's credit limit. Held for operator review rather than auto-applied. |
 | `LIMIT_BELOW_LOCAL` | *(informational, not a quarantine)* A limit reduction leaves the limit under this service's own reservations. The message **is** applied and the program is marked over-limit; the reason is recorded for operator visibility. |
 | `HANDLER_FAILURE` | Applying the message failed **permanently**. The transaction rolled back; nothing was applied. Transient failures (connection loss, pool exhaustion, lock timeout, serialization failure) are retried in place with backoff and never reach this topic. |
