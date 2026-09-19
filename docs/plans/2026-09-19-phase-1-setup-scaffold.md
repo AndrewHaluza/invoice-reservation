@@ -665,10 +665,11 @@ Covers T006 and T007.
    `treasury.capacity.events`, `treasury.capacity.snapshots`, `treasury.capacity.dlq`, each with
    3 partitions and replication factor 1.
 
-   Two listeners are deliberate: the PLAINTEXT listener on 9092 is what `rpk` inside the
-   container uses for administration, and the SASL listener on 9093 is what the service
-   authenticates against, so research R11's authenticated path is the one the application
-   exercises from the first run.
+   `redpanda.enable_sasl=true` applies cluster-wide, not per listener, so **every** Kafka client
+   must authenticate — including `rpk` run inside the container. The PLAINTEXT listener on 9092
+   remains defined for future tooling, but it is not an unauthenticated administration path.
+   `redpanda-init` creates the SASL user through the admin API on 9644 before any Kafka call,
+   which is why topic creation succeeds.
 
 2. `.env.example` containing every key from the schema:
 
@@ -729,7 +730,9 @@ docker compose ps
 
 docker compose exec -T postgres pg_isready -U capacity -d capacity
 docker compose exec -T redpanda rpk cluster health
-docker compose exec -T redpanda rpk topic list
+docker compose exec -T redpanda rpk topic list \
+  -X user=capacity -X pass=capacity_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 -X brokers=localhost:9093
 
 docker compose down
 ```
@@ -775,7 +778,9 @@ npm test                   # expect exit 0
 npm run test:cov ; echo "COVERAGE_EXIT=$?"   # expect NON-ZERO
 
 docker compose up -d && sleep 30 && docker compose ps
-docker compose exec -T redpanda rpk topic list
+docker compose exec -T redpanda rpk topic list \
+  -X user=capacity -X pass=capacity_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 -X brokers=localhost:9093
 docker compose down
 ```
 

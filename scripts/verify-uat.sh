@@ -57,18 +57,52 @@ if (missing.length > 0) {
 NODE
 ok "coverage gate wired at 80% (branches/functions/lines/statements)"
 
-# --- 5. plan.md dependency boundaries declared ------------------------------
-node - <<'NODE' || fail "eslint.config.mjs is missing the plan.md dependency boundaries"
-const { readFileSync } = require('fs');
-const src = readFileSync('eslint.config.mjs', 'utf8');
-const required = ['element-types', "'domain'", "'treasury'"];
-const missing = required.filter((token) => !src.includes(token));
-if (missing.length > 0) {
-  console.error(`missing boundary config tokens: ${missing.join(', ')}`);
-  process.exit(1);
+# --- 5. plan.md dependency boundaries enforced ------------------------------
+cleanup_probe() {
+  rm -f src/shared/__probe_noop.ts \
+        src/capacity/infrastructure/__probe_repo.ts \
+        src/capacity/domain/__probe_violation.ts \
+        src/capacity/domain/__probe_allowed.ts \
+        src/treasury/__probe_violation.ts
+  rmdir -p src/capacity/domain src/capacity/infrastructure src/shared src/treasury 2>/dev/null || true
 }
-NODE
-ok "dependency boundaries declared in eslint.config.mjs"
+trap cleanup_probe EXIT
+
+mkdir -p src/shared src/capacity/infrastructure src/capacity/domain src/treasury
+
+cat > src/shared/__probe_noop.ts <<'PROBE'
+export const noop = (): void => undefined;
+PROBE
+
+cat > src/capacity/infrastructure/__probe_repo.ts <<'PROBE'
+export const repo = (): void => undefined;
+PROBE
+
+cat > src/capacity/domain/__probe_violation.ts <<'PROBE'
+import { repo } from '../infrastructure/__probe_repo';
+
+repo();
+PROBE
+
+cat > src/capacity/domain/__probe_allowed.ts <<'PROBE'
+import { noop } from '../../shared/__probe_noop';
+
+noop();
+PROBE
+
+cat > src/treasury/__probe_violation.ts <<'PROBE'
+import { repo } from '../capacity/infrastructure/__probe_repo';
+
+repo();
+PROBE
+
+npx eslint src/capacity/domain/__probe_violation.ts >/dev/null \
+  && fail "boundary matrix does not reject domain -> infrastructure"
+npx eslint src/capacity/domain/__probe_allowed.ts >/dev/null \
+  || fail "boundary matrix wrongly rejects domain -> shared"
+npx eslint src/treasury/__probe_violation.ts >/dev/null \
+  && fail "boundary matrix does not reject treasury -> infrastructure"
+ok "dependency boundaries enforced (domain and treasury probes)"
 
 # --- 6. .env.example matches env.schema.ts exactly --------------------------
 node - <<'NODE' || fail ".env.example does not declare exactly the env.schema.ts keys"

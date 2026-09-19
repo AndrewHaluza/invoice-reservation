@@ -43,11 +43,11 @@ export default [
       ],
     },
     rules: {
-      'boundaries/element-types': [
+      'boundaries/dependencies': [
         'error',
         {
           default: 'disallow',
-          rules: [
+          policies: [
             { from: 'domain', allow: ['domain', 'shared'] },
             { from: 'application', allow: ['domain', 'infrastructure', 'shared', 'fx', 'config'] },
             { from: 'infrastructure', allow: ['domain', 'shared', 'config'] },
