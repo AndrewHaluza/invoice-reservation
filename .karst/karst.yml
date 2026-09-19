@@ -176,23 +176,12 @@ uat:
   secrets: []
   passthrough: []
   origins: []
-  repositories:
-    frontend:
-      gates:
-        - name: test
-          kind: script
-          script: test:unit
+  # Only `service` is declared under repositories:, so every gate here is
+  # global. A `repo:`-scoped gate naming anything else would silently never run.
   gates:
     - name: test
       kind: script
       script: test
-    - name: e2e
-      kind: command
-      command: npx
-      args:
-        - playwright
-        - test
-      repo: frontend
   testerVerifier:
     name: verify-uat
     kind: command
@@ -209,6 +198,18 @@ review:
   stallTimeoutMinutes: 60
   requireIndependentSignal: true
   openChanges: false
+  # Static questions only — none of these execute the product's behavior, so
+  # review stays independent of uat's `test` (requireIndependentSignal).
+  gates:
+    - name: lint
+      kind: script
+      script: lint
+    - name: typecheck
+      kind: script
+      script: typecheck
+    - name: build
+      kind: script
+      script: build
   findings:
     enabled: true
     blockingSeverity: high
