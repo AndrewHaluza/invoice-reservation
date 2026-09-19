@@ -168,7 +168,7 @@ uat:
     kind: command
     command: ./scripts/verify-uat.sh
   testerObservations:
-    blockingSeverity: none
+    blockingSeverity: high
 ticketing:
   provider: manual
   advanceOnShip: false
