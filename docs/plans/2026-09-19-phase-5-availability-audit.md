@@ -8,10 +8,12 @@ because it is P1 and because SC-004b is what proves the ledger design works at a
 
 ## Preconditions
 
-**Phases 3 and 4 are not merged as of this writing** — `src/capacity/api/` and
-`src/capacity/application/` do not yet exist on `develop`. This plan is written against the state
-those phases leave behind and must not be started before they are merged and green. Re-verify each
-fact below by reading the repository; if any is false, stop.
+**Phase 3 is at ship stage; phase 4 is ticketed as `FEAT-4-PHASE-4-RELEASE-CAPACITY` and not yet
+executed.** Start this phase only once both have merged and CI is green on `develop`. Phase 4 also
+carries three phase-3 defect fixes (the error filter's handling of non-coded `HttpException`s, the
+`health.spec.ts` harness, and the FX cache key), so the repository this phase inherits differs
+from what phase 3 shipped. Re-verify each fact below by reading the repository; if any is false,
+stop.
 
 - Phases 3 and 4 have landed: reserve and release both work, `CapacityController` exists,
   the availability projection built in phase 3 already computes limit / reserved / signed available
