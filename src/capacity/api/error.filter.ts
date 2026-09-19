@@ -28,6 +28,13 @@ const MESSAGES: Record<RefusalCode, string> = {
   REQUEST_IN_FLIGHT: 'An identical request is still being applied.',
   POSITION_UNVERIFIED:
     'The program position cannot be verified at this time.',
+  INVALID_AMOUNT: 'The release amount must be positive.',
+  CURRENCY_MISMATCH:
+    "The release must be denominated in the invoice's own currency.",
+  RESERVATION_TERMINAL: 'The reservation is already released or closed.',
+  RELEASE_EXCEEDS_RESERVED:
+    'The release exceeds what remains reserved for this invoice.',
+  NOT_FOUND: 'The program or reservation does not exist.',
 };
 
 const STATUS: Record<RefusalCode, number> = {
@@ -40,6 +47,11 @@ const STATUS: Record<RefusalCode, number> = {
   FX_RATE_UNAVAILABLE: 409,
   AMOUNT_ROUNDS_TO_ZERO: 409,
   POSITION_UNVERIFIED: 503,
+  INVALID_AMOUNT: 400,
+  CURRENCY_MISMATCH: 409,
+  RESERVATION_TERMINAL: 409,
+  RELEASE_EXCEEDS_RESERVED: 409,
+  NOT_FOUND: 404,
 };
 
 const MAX_DETAILS = 20;
