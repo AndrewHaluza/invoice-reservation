@@ -26,18 +26,22 @@ fact below by reading the repository; if any is false, stop.
   time therefore have **no source until phase 7**.
 - `ProgramScopeGuard` resolves ownership only from a route parameter named exactly `programId`.
 - Layer rule: `api → application | domain | shared`. A controller must not touch a repository.
-- **`program.reconciliation_pending` does not exist.** No phase up to here creates it, and phase 8
-  (T089) is what gives it a writer. Task 0 below adds the column so this phase can report it.
+- **`program.reconciliation_pending` does not exist, and must not be created.** `data-model.md`'s
+  `program` table enumerates every persisted column and has no such field; the same table marks the
+  analogous `available_minor` "Derived, not stored". `reconciliationPending` is likewise **derived
+  at read time** (see Key Decision 9). It is also the one flag `http-api.yaml:356` leaves out of
+  the `Availability` `required` list.
 - Two throttlers are registered globally (read 600/min, write 120/min) and **every route consumes
   both budgets**. `test/integration/auth.spec.ts` is the reference for the `ThrottlerStorage`
   override that test code uses to bypass them.
 
 ## Target State
 
-- `GET /v1/programs/{programId}/availability` returns limit, reserved (total / local / treasury),
-  **signed** available, over-limit state, `positionChangedAt`, treasury applied version, treasury
-  effective time, `lagSeconds`, and the three health flags `positionVerified`,
-  `investigationRequired`, `reconciliationPending`.
+- `GET /v1/programs/{programId}/availability` returns the `Availability` schema of
+  `contracts/http-api.yaml:354-407` exactly: limit, reserved (total / local / treasury), **signed**
+  available, over-limit state, `positionChangedAt`, the `treasury` object, and the health flags
+  `positionVerified`, `investigationRequired` (both **required**) and `reconciliationPending`
+  (optional).
 - `GET …/reservations`, `GET …/reservations/{invoiceId}`, `GET …/ledger` serve the audit path.
 - Summing the ledger per component reproduces `local_reserved_minor`, `treasury_reserved_minor`
   **and `credit_limit_minor`** exactly, so `available` is fully reconstructible from the audit API.
@@ -51,14 +55,13 @@ fact below by reading the repository; if any is false, stop.
 - Read routes on `CapacityController` (T059) and a new `src/capacity/api/audit.controller.ts` (T060)
 - `scripts/audit-ledger.ts` + `npm run audit:ledger` (T061)
 - Tests T054, T055, T056
-- `docs/ASSUMPTIONS.md` entry: reads go to the primary
+- `docs/ASSUMPTIONS.md` entries: reads go to the primary; the FR-007a lag substitute
 
 ### Out of Scope
 
-- Cancellation, treasury ingestion, snapshots. Where a field has no source yet (treasury applied
-  version, effective time), the service returns `null` and `lagSeconds: null` — it does **not**
-  invent a value and does **not** omit the field.
+- Cancellation, treasury ingestion, snapshots.
 - Any write path change.
+- **Any schema change.** This phase adds no column and no migration.
 
 ## Key Decisions
 
@@ -67,42 +70,55 @@ fact below by reading the repository; if any is false, stop.
 2. **Reads go to the primary.** FR-007b requires a client to see its own accepted change immediately;
    a read replica breaks that. This is recorded in `docs/ASSUMPTIONS.md` as a standing constraint,
    not left implicit in the connection config.
-3. **`lagSeconds` here is an approximation, and phase 7 must revisit it.** FR-007a defines lag
-   against the **newest message available on the stream**; phase 5 has no stream reader, so this
-   phase computes it against wall-clock `now` (Key Decision 5). That satisfies the field's shape,
-   not FR-007a's letter. Record the gap in `docs/ASSUMPTIONS.md` and re-derive it in phase 7 once
-   the consumer knows the stream head.
+3. **⚠ FR-007a is NOT met by this phase, and that needs ratifying before execution.** FR-007a
+   defines lag against the **newest message available on the stream**. Phase 5 has no stream
+   reader, so it cannot compute that figure at all. The contract makes silence impossible:
+   `treasury` is a **required** object whose own `required` list is `[appliedVersion, lagSeconds]`,
+   with `lagSeconds` typed `number, minimum: 0` — **not nullable** (`http-api.yaml:398-406`). So
+   this phase must emit *some* number while being unable to emit the right one.
+
+   This plan does **not** get to decide that unilaterally — Executor Rule 8 forbids reinterpreting
+   a product requirement. Two admissible resolutions, and someone with authority picks one before
+   Task 4 starts:
+
+   - **(A) Ship the substitute now.** `lagSeconds = max(0, (now − treasuryEffectiveAt)/1000)`, `0`
+     when no treasury state has applied; phase 7 replaces it with the stream-head computation.
+     FR-007a is knowingly unmet for the phase-5→7 window, recorded in `docs/ASSUMPTIONS.md`.
+   - **(B) Re-sequence.** Move the `treasury` block of the availability response to phase 7 and
+     amend the contract to make it optional until then, so nothing ever reports a figure FR-007a
+     would call wrong.
+
+   Until that call is made, treat this as a **stop-and-ask**, not an executor decision. The rest of
+   the phase does not depend on it and can proceed.
 4. **Availability reads take no row lock.** A plain `SELECT` of the program row is enough; the
    position columns are only ever written inside the locked transaction, so a committed read is
    consistent. Taking `FOR UPDATE` on a read path would serialise reads behind writes and fail SC-003.
 5. **Paging is a cursor over `sequence DESC`, not `occurred_at`.** `sequence` is gapless and totally
    ordered per program, so the cursor is deterministic on ties; `occurred_at` is not unique and would
    skip or repeat rows (FR-031).
-6. **`lagSeconds` is computed from the treasury effective time**, not from `positionChangedAt`:
-   `lagSeconds = (now − treasuryEffectiveAt) / 1000`, `null` when no treasury state has ever applied.
-   Using the local change time would report zero lag for a program treasury has never reached.
+6. **The `treasury` object is never null, per the contract.** `appliedVersion` is
+   `program.treasury_version` (`BIGINT NOT NULL DEFAULT 0`, so `0` before any treasury state — not
+   null); `effectiveAt` is `program.treasury_effective_at` and **is** nullable; `lagSeconds` is a
+   non-null `number >= 0` under resolution (A) above. Computing lag from `positionChangedAt`
+   instead would report zero lag for a program treasury has never reached, which is the one answer
+   that is definitely wrong.
 7. **Three health flags are reported, not derived by the client.** All three come straight from the
    program row; the basis for exposing them on a read is **FR-019f** ("its finding MUST be visible …
    on the availability response"). FR-019e is the separate *write-refusal* rule for
    `positionVerified` and is phase 9's (T092). Phase 8 writes `investigation_required` and
    `reconciliation_pending`; until then both are `false`.
-8. **`GET /ledger` requires `capacity:audit`**, distinct from `capacity:read` (FR-017b). It lives on
-   its own controller so the scope boundary is visible in the file layout.
+8. **`GET /ledger` requires `capacity:audit`** — declared by the contract itself at
+   `http-api.yaml:239` (`x-required-scope: capacity:audit`), not derived from FR-017b. FR-017b is
+   about separating *read* from *reserve/release/cancel*; the third audit scope is an additional
+   contract-level distinction. Cite the contract for it, not the FR. The route lives on its own
+   controller so the boundary is visible in the file layout.
+9. **`reconciliationPending` is derived at read time, not stored.** True when the most recently
+   applied snapshot acknowledged a reservation that has since been released — computable from
+   `snapshot_acknowledgement` joined against the reservations' current status, with no new column
+   and no writer. `data-model.md` already treats the sibling `available_minor` this way. Phase 8's
+   T089 supplies the acknowledgement rows this reads; until then the predicate is simply false.
 
 ## Execution Order
-
-### Task 0: Add the `reconciliation_pending` column
-
-A migration adding `program.reconciliation_pending boolean NOT NULL DEFAULT false`, the matching
-field on `ProgramEntity`, and `reconciliationPending` on the domain `ProgramPosition` /
-`ProgramRepository.toPosition`. Generate it with
-`npm run migration:generate -- src/migrations/AddReconciliationPending`; run migrations as the
-owning `capacity` role via `MIGRATION_DATABASE_URL`, never as `capacity_app`.
-
-This phase only **reports** the flag — no code here writes it. Its writer is phase 8's T089.
-
-Verification: `npm run migration:run && npm run migration:revert && npm run migration:run` is clean;
-`npm run typecheck` passes.
 
 ### Task 1: `test/integration/read-your-writes.spec.ts` (T054) — WRITE FIRST
 
@@ -116,8 +132,9 @@ write budget of 120/min this spec would otherwise take over an hour and start re
 before trial 10,000 — the throttle, not the limit, is what breaks it. The override belongs to the
 test harness only; the production guards stay registered.
 
-Add to `docs/ASSUMPTIONS.md` in the same task: reads go to the primary, and `lagSeconds` is a
-wall-clock approximation of FR-007a until phase 7 supplies the stream head.
+Add to `docs/ASSUMPTIONS.md` in the same task: reads go to the primary, and — if resolution (A) was
+ratified — that `lagSeconds` is a wall-clock substitute for FR-007a until phase 7 supplies the
+stream head.
 
 Verification: the spec fails today only if the endpoint is missing — confirm that failure mode before
 writing the implementation.
@@ -134,16 +151,20 @@ defect in the phase 2 migration or seed — stop and report it; do not paper ove
 ### Task 3: `test/contract/availability.contract.spec.ts` (T056) — WRITE FIRST
 
 Assert the response shape field by field, including: `available.amountMinor` is a **signed** string;
-an over-limit program reports a negative value; `positionChangedAt` is ISO-8601;
-`treasuryAppliedVersion` and `treasuryEffectiveAt` are `null` before any treasury state exists and
-the field is still present; `lagSeconds` is `null` in that case; the three health flags are booleans;
-403 without `capacity:read`; 404 for a foreign program.
+an over-limit program reports a negative value; `positionChangedAt` is ISO-8601; the `treasury`
+object is **present and non-null** with `appliedVersion: 0` and a non-null `lagSeconds >= 0` before
+any treasury state exists, and `effectiveAt: null` in that case; `positionVerified` and
+`investigationRequired` are present booleans; `reconciliationPending` is a boolean when present;
+403 without `capacity:read`; 404 for a foreign program. Validate the response against the
+`Availability` schema rather than asserting field-by-field only.
 
 ### Task 4: The availability service (T057)
 
-`src/capacity/application/availability.service.ts` returning a single readonly view object built from
-`ProgramPosition` plus the stream-position row when it exists. Pure assembly — no lock, no write.
-Use the domain helpers `totalReserved`, `available`, `isOverLimit` rather than re-deriving arithmetic.
+`src/capacity/application/availability.service.ts` returning a single readonly view matching the
+`Availability` schema field for field. Pure assembly — no lock, no write. Use the domain helpers
+`totalReserved`, `available`, `isOverLimit` rather than re-deriving arithmetic. Derive
+`reconciliationPending` per Key Decision 9. Emit the `treasury` object per Key Decision 6, under
+whichever FR-007a resolution was ratified.
 
 Verification: `npx jest test/contract/availability.contract.spec.ts` passes once Task 6 wires the
 route; `npm run lint` clean.

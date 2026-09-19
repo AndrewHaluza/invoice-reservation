@@ -46,6 +46,8 @@ behind. Re-verify each fact below by reading the repository; if any is false, st
 - `src/capacity/domain/policies/apply-snapshot.policy.ts` (T086)
 - `src/capacity/application/apply-snapshot.service.ts` (T087, T088, T089)
 - Tests T080–T084
+- Closing out the two `it.todo` DLQ cases phase 7 deferred here (Task 11)
+- One contract question to ratify before coding (Task 0)
 
 ### Out of Scope
 
@@ -55,6 +57,10 @@ behind. Re-verify each fact below by reading the repository; if any is false, st
 
 ## Key Decisions
 
+0. **The snapshot is applied as compensating ledger entries and nothing else (FR-011, FR-011a,
+   FR-019, FR-019a).** Every reported figure stays reconstructible by summing entries per
+   component; no code in this phase writes a position column directly. The lettered rules below are
+   how that parent requirement is honoured.
 1. **Marker first, then sums (FR-011d).** Applying the acknowledgement marker before computing
    `acked_local` and `local_total` versus after differs by exactly the amount newly acknowledged.
    The ordering is the requirement, not an implementation detail. T082 asserts it directly.
@@ -75,15 +81,24 @@ behind. Re-verify each fact below by reading the repository; if any is false, st
 7. **Limit reductions are applied, not refused (FR-011c).** Treasury owns the limit. The program
    going over-limit is the correct, visible consequence; refusing would leave the two systems
    disagreeing about the limit itself.
-8. **A negative `target_treasury` is an inconsistent snapshot, and is quarantined
-   `SNAPSHOT_INCONSISTENT`.** `target_treasury` is only non-negative when treasury's reported
+8. **⚠ A negative `target_treasury` is an inconsistent snapshot. The proposed answer is to
+   quarantine it `SNAPSHOT_INCONSISTENT` — but that reason code is NOT yet ratified.**
+   `contracts/errors.md` carries the quarantine reason set (`SCHEMA_INVALID`, `UNKNOWN_PROGRAM`,
+   `CURRENCY_MISMATCH`, `MISSING_ACK_MARKER`, `VERSION_CONFLICT`, `IMPLAUSIBLE_DELTA`,
+   `LIMIT_BELOW_LOCAL`, `HANDLER_FAILURE`) and states codes are part of the contract, additive-only.
+   Adding a code is therefore permitted but must be done **in the contract first** — Task 0 below,
+   which is a stop-and-ask, not an executor edit. The spec is genuinely silent on this case
+   (FR-011g governs local-vs-local disagreement, not a snapshot disagreeing with its own marker),
+   so the reason is new ground rather than a misuse of an existing code.
+
+   The reasoning for refusing: `target_treasury` is only non-negative when treasury's reported
    `reservedMinor` genuinely includes every reservation its marker acknowledges. A lagging or
    malformed snapshot where `acked_local > snapshot.reservedMinor` yields a negative target and
    would write a negative `TREASURY` component — the exact freeze this phase exists to prevent,
    arriving through arithmetic instead of through blending. The FR-032 magnitude guard does not
    catch it: a small inconsistency passes under any sane proportion. Check
    `target_treasury >= 0n` explicitly in the policy and refuse; the decomposition is only valid
-   under that invariant. Add the reason to the DLQ reason set and to T081.
+   under that invariant.
 9. **The FR-032 magnitude guard quarantines, it does not clamp.** It is scoped to `|delta_treasury|`
    deliberately: FR-032 speaks of a "treasury correction", and FR-011f already splits the components,
    so `delta_local` (which raises `investigation_required`) and `delta_limit` (which treasury owns
@@ -94,6 +109,23 @@ behind. Re-verify each fact below by reading the repository; if any is false, st
    and reproducible on replay — a marker held only in memory makes the ledger unexplainable.
 
 ## Execution Order
+
+### Task 0: Ratify the `SNAPSHOT_INCONSISTENT` reason — STOP AND ASK
+
+Do not write code for this task. The negative-`target_treasury` case (Key Decision 8) needs a
+quarantine reason that `contracts/errors.md` does not yet define. Put the choice to whoever owns
+the contract:
+
+- **(A)** Add `SNAPSHOT_INCONSISTENT` to `contracts/errors.md` as an additive quarantine reason,
+  then proceed as this plan describes.
+- **(B)** Reuse `SCHEMA_INVALID` on the grounds that a snapshot contradicting its own marker is
+  malformed, and add no code.
+- **(C)** Apply it rather than quarantining, clamping `target_treasury` at zero and setting
+  `investigation_required`. **This plan argues against (C)**: it books a correction nobody can
+  explain from the snapshot, which is what FR-011f and FR-019a exist to prevent.
+
+Whichever is chosen, the contract and this plan must agree **before** Task 6 lands. An executor
+must not invent the code on its own.
 
 ### Task 1: `test/integration/stale-reconciliation.spec.ts` (T080) — MANDATORY (Constitution VI), WRITE FIRST
 
@@ -182,6 +214,15 @@ in phase 7's Task 1.
 Set when an applied snapshot acknowledged a reservation that has since been released, so a client
 sees that the reported figure is known to be conservative instead of discovering it by arithmetic
 (spec.md Trade-offs). Phase 5 already reports the flag; this task gives it a writer.
+
+### Task 11: Close phase 7's deferred DLQ cases
+
+Phase 7's `test/integration/dlq.spec.ts` left `MISSING_ACK_MARKER` and `IMPLAUSIBLE_DELTA` as
+`it.todo` because no snapshot handler existed then. Both now exist (Tasks 6 and 9). Replace the two
+`it.todo` entries with real assertions, and add the reason ratified in Task 0. Leaving an `it.todo`
+behind is how a quarantine reason ends up with no test at all.
+
+Verification: `grep -rn "it.todo" test/` returns nothing for the DLQ spec.
 
 ## Final Verification
 

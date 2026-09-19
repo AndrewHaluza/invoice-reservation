@@ -32,6 +32,8 @@ reading the repository; if any is false, stop.
   repaid before the rest was abandoned (FR-025–027).
 - A second cancellation, or a cancellation of a `FULLY_RELEASED` reservation, is refused
   `RESERVATION_TERMINAL` (409) and applies nothing.
+- A fresh cancellation returns **201**; an idempotent replay returns **200** with the identical
+  body (`contracts/http-api.yaml:209-217`) — the same split as release.
 - No code path anywhere expires a reservation on elapsed time (FR-028).
 
 ## Scope
@@ -43,8 +45,9 @@ reading the repository; if any is false, stop.
 - `src/capacity/api/dto/cancellation.dto.ts` (T066)
 - The cancellation route on `CapacityController` (T067)
 - Tests T062, T063
-- The OpenAPI correction: `cancelReservation` must declare **400**, which it previously did not
-  despite carrying a required enum body.
+
+`contracts/http-api.yaml:222` **already declares 400** for `cancelReservation`. tasks.md T066's note
+that it did not is stale; confirm and change nothing.
 
 ### Out of Scope
 
@@ -59,8 +62,10 @@ reading the repository; if any is false, stop.
    cannot pick the cause, so the ledger cannot be made to lie about whether money came back.
 2. **The delta is exactly `outstanding_reserved_minor`**, read under the lock — never recomputed
    from the invoice amount and the rate. Recomputing would drift from what releases actually applied.
-3. **`reason` is a required enum on the body**, with a bounded free-text note. The enum is what makes
-   the cancellation queryable; the note is not a substitute for it.
+3. **`reason` is a required enum on the body**, and its values are exactly
+   `[CANCELLED, WRITTEN_OFF]` per `contracts/http-api.yaml:422-429`, with an optional `note` of
+   `maxLength: 512`. The enum is what makes the cancellation queryable; the note is not a
+   substitute for it. Do not add values — the enum is ratified.
 4. **Terminal states are checked in the policy, not the controller**, so the rule is unit-testable
    without HTTP and cannot be bypassed by a future caller.
 5. **The policy returns a positive magnitude; the service negates it.** `CancelDecision.deltaMinor`
@@ -96,7 +101,7 @@ Verification: the spec passes today and must keep passing; it is a regression gu
 
 Against Testcontainers:
 
-- Cancel an `ACTIVE` reservation → all remaining capacity returns; ledger cause is `CANCELLATION`;
+- Cancel an `ACTIVE` reservation → **201**; all remaining capacity returns; ledger cause is `CANCELLATION`;
   status `CANCELLED`; `outstanding_reserved_minor = 0`; `program.local_reserved_minor` returns to
   its pre-reservation value.
 - Reserve, release part, then cancel → cause `WRITE_OFF`, status `WRITTEN_OFF`, and the summed
@@ -129,10 +134,14 @@ Verification: unit tests for all five statuses; `npm run lint` clean.
 
 ### Task 4: The cancellation DTO (T066)
 
-`src/capacity/api/dto/cancellation.dto.ts`: required `reason` enum (values from the contract),
-optional `note` with an explicit max length, whitelist + `forbidNonWhitelisted`. Then update the
-OpenAPI document so `cancelReservation` declares **400** — it has a required enum body and could
-always return one.
+`src/capacity/api/dto/cancellation.dto.ts`: required `reason` enum — exactly `CANCELLED` and
+`WRITTEN_OFF` — plus optional `note` at `maxLength: 512`, whitelist + `forbidNonWhitelisted`.
+No OpenAPI edit: line 222 already declares 400.
+
+Note the two namespaces do not coincide. The request's `reason` says which *outcome the caller is
+asserting*; the **ledger cause** (`CANCELLATION` / `WRITE_OFF`) and the **status** are still derived
+from the reservation's own state per Key Decision 1, never taken from the body. A caller sending
+`reason: CANCELLED` for a `PARTIALLY_RELEASED` reservation still gets `WRITE_OFF` / `WRITTEN_OFF`.
 
 ### Task 5: The cancel service (T065)
 
@@ -162,11 +171,11 @@ Manual check:
 ```bash
 curl -i -X POST "$BASE/v1/programs/b1b2c3d4-0001-4000-8000-000000000011/reservations/INV-0002/cancellation" \
   -H "Authorization: Bearer $TOKEN" -H "Idempotency-Key: cancel-0001" \
-  -H "Content-Type: application/json" -d '{"reason":"INVOICE_VOIDED"}'
+  -H "Content-Type: application/json" -d '{"reason":"CANCELLED","note":"invoice voided upstream"}'
 ```
 
-Expected `200` with the availability restored; a repeat under the same key returns the identical
-body; a repeat under a **new** key returns `409 RESERVATION_TERMINAL`.
+Expected **`201`** with the availability restored; a repeat under the same key returns `200` with
+the identical body; a repeat under a **new** key returns `409 RESERVATION_TERMINAL`.
 
 ## Executor Rules
 

@@ -37,7 +37,10 @@ behind. Re-verify each fact below by reading the repository; if any is false, st
 - A scheduled check compares active reservations against the `LOCAL` component, sets
   `investigation_required`, emits a metric, and **never self-corrects** (FR-019b, FR-019f, SC-004c).
 - A program whose stream position is missing or behind its ledger starts `position_verified = FALSE`
-  and refuses writes `POSITION_UNVERIFIED` **per program, not service-wide** (FR-019e).
+  and refuses writes `POSITION_UNVERIFIED` at **503** — per `contracts/errors.md:27` and the
+  `PositionUnverified` response in `http-api.yaml` — **per program, not service-wide** (FR-019e).
+- Request-identifier retention is actually enforced: outcomes age out at 30 days while the
+  identifiers survive indefinitely (FR-006b).
 - Every route is proven to enforce authentication and scope, the two `security: []` health probes
   excepted, and error `details` never leaks `stack`, `sql` or `query` (SC-007, SC-007a).
 - The performance harnesses exist as a release gate, not a per-commit cost.
@@ -51,7 +54,10 @@ T090–T100: the reconciliation job and its manual script, recovery detection, t
 auth-enumeration contract test, the performance harnesses, `docs/ASSUMPTIONS.md`, the Kafka topic
 ACLs, the quickstart run, the coverage audit, and removing the constitution's scratch comment.
 
-**Plus one item with no task id: extending `scripts/verify-uat.sh` to phases 3–8** (Task 9 below).
+**Plus two items with no task id.** First, **FR-006b's retention sweep** (Task 13) — the global
+coverage sweep found it orphaned: phase 3 deferred it here, tasks.md never numbered it, and T042
+already depends on its effect. Without it a ratified MUST is realised by no plan at all. Second,
+**extending `scripts/verify-uat.sh` to phases 3–8** (Task 9 below).
 `grep -n verify-uat specs/001-program-capacity-reservation/tasks.md` returns nothing — tasks.md has
 no T-number for it, which is itself the gap: the phase-1 verifier would otherwise keep passing over
 a system eight phases larger. It is carried here deliberately and flagged as beyond T090–T100, not
@@ -68,15 +74,26 @@ smuggled in. If it is instead assigned a task id in tasks.md, renumber according
 1. **The verifier flags; it never self-corrects (SC-004c).** A job that silently rewrote the
    position would destroy the one property the ledger exists to provide — that every figure is
    explainable by entries.
-2. **`POSITION_UNVERIFIED` is per program.** A service-wide refusal turns one program's recovery gap
-   into a full outage; FR-019e scopes it deliberately.
+2. **`POSITION_UNVERIFIED` is per program, and it is 503.** `contracts/errors.md:27` fixes the
+   status and adds a subtlety worth encoding: **ownership resolution runs first**, so a program
+   outside the caller's organisation answers **404**, never 503 — otherwise the refusal leaks that
+   the program exists. A service-wide refusal would turn one program's recovery gap into a full
+   outage; FR-019e scopes it deliberately.
 3. **Recovery is detected at startup by comparing `program_stream_position` against the ledger**, not
    by trusting Kafka's committed offset — the offset lives outside the transaction and can be ahead.
 4. **Performance specs are wired to `npm run test:perf`, not to `npm test`.** They are a release
    gate; running them per commit makes the suite unusable and tempts people to weaken them.
 5. **The auth test enumerates routes from the router**, not from a hand-maintained list — a list
    goes stale the moment a route is added, which is precisely when the test matters.
-6. **`verify-uat.sh` is extended per phase or it measures nothing.** Add the phase 3–8 criteria as
+   SC-007a is a **non-disclosure** property, not just a refusal count: a program belonging to
+   another organisation and a program that does not exist must be **indistinguishable** in status
+   and body. Asserting only "403 without scope" leaves the property untested, which is how it
+   regresses.
+6. **FR-006b is enforced here or nowhere.** Phase 3 deliberately deferred the retention sweep and
+   made the `EXPIRED` state representable; T042 already *reads* the outcome-nulled case to answer
+   `IDEMPOTENCY_EXPIRED`. No task in tasks.md ever schedules the ageing that produces it — see
+   Task 13.
+7. **`verify-uat.sh` is extended per phase or it measures nothing.** Add the phase 3–8 criteria as
    their own sections rather than leaving the phase 1 gate passing over a much larger system.
 
 ## Execution Order
@@ -113,11 +130,16 @@ actual. Wire as an npm script. It calls the same service — no second implement
 
 At startup, for each program: if `program_stream_position` is missing or its offset is behind what
 the ledger implies, set `position_verified = FALSE`. While false, **write** paths for that program
-refuse `POSITION_UNVERIFIED` (409) while reads continue and report the flag. The flag clears only
-when a fresh snapshot re-establishes the position (phase 8's apply service).
+refuse `POSITION_UNVERIFIED` at **503** while reads continue and report the flag. The flag clears
+only when a fresh snapshot re-establishes the position (phase 8's apply service).
 
-Verification: integration test toggling the flag and asserting reserve/release/cancel all refuse for
-that program while another program's writes succeed.
+Ordering matters: `ProgramScopeGuard` resolves ownership **before** the verification check, so a
+program outside the caller's organisation answers 404 and never reveals its state
+(`contracts/errors.md:27`).
+
+Verification: integration test toggling the flag and asserting reserve/release/cancel all refuse
+503 for that program while another program's writes succeed, plus one case proving a foreign
+unverified program still answers 404.
 
 ### Task 5: `test/integration/ledger-recovery.spec.ts` (T093)
 
@@ -132,7 +154,14 @@ exclude it from the default run the same way Task 7 excludes the performance spe
 Enumerate every registered route from the Nest router and assert each one: 401 unauthenticated;
 403 with a token lacking the route's scope; and that no error body's `details` contains a `stack`,
 `sql` or `query` key. The only exceptions are the two health probes declared `security: []`
-(SC-007, SC-007a). A newly added route with no scope must fail this test.
+(SC-007). A newly added route with no scope must fail this test.
+
+**Plus the SC-007a non-disclosure assertion, which is the part most easily missed:** for each
+program-scoped route, a request naming a program owned by **another organisation** and a request
+naming a program id that **does not exist** must return the *same* status and the *same* body
+shape — 404 both times. Assert equality of the two responses, not merely that each is a refusal.
+A test that checks only "both are errors" passes while the endpoint leaks existence through a
+403-vs-404 difference.
 
 ### Task 7: Performance harnesses (T095)
 
@@ -160,6 +189,28 @@ replay routed through the ordinary validation path, never injected past it (FR-0
 Add the phase 3–8 acceptance criteria as their own sections, keeping the existing `.env.example` ↔
 `env.schema.ts` equality assertion. The script still must not start Docker; it asserts what can be
 asserted statically and names what it cannot.
+
+### Task 13: The request-record retention sweep (FR-006b — no task id, see Scope)
+
+`grep -rn "retention\|sweep" specs/001-program-capacity-reservation/tasks.md` finds only T042,
+which **consumes** the aged-out state (`outcome` nulled by retention → `IDEMPOTENCY_EXPIRED`).
+Nothing anywhere produces it. Phase 3 deferred the sweep here explicitly; tasks.md never gave it a
+number. Without it `IDEMPOTENCY_EXPIRED` is dead code and `request_record` grows without bound.
+
+Implement a scheduled sweep that, for records older than the configured retention window
+(default 30 days, an env var added to `env.schema.ts` **and** `.env.example`):
+
+- nulls `outcome` and its content fingerprint payload, **keeping the row** — the PK
+  `(organisation_id, request_id)`, the fingerprint hash and the owning organisation stay
+  indefinitely, so a reused identifier is still recognised and answered `IDEMPOTENCY_EXPIRED`
+  rather than mistaken for a new request (FR-006b's whole point: "Deleting the record outright
+  would make the two indistinguishable");
+- never deletes a `PENDING` row, whatever its age — an in-flight marker outliving its window is an
+  incident to surface, not garbage to collect.
+
+Write `test/integration/idempotency-retention.spec.ts`: a record past the window answers
+`IDEMPOTENCY_EXPIRED` on reuse and is **not** treated as new; the row still exists; a `PENDING` row
+is untouched.
 
 ### Task 10: The quickstart run (T098)
 
