@@ -87,7 +87,15 @@ describe('InitialSchema migration', () => {
     await ds.initialize();
 
     await ds.runMigrations();
-    await ds.undoLastMigration();
+    for (;;) {
+      const applied = await ds.query<{ id: number }[]>(
+        `SELECT id FROM typeorm_migrations`,
+      );
+      if (applied.length === 0) {
+        break;
+      }
+      await ds.undoLastMigration();
+    }
 
     const rows = await ds.query<{ reg: string | null }[]>(
       `SELECT to_regclass('public.program') AS reg`,

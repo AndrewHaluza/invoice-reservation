@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module';
+import { CapacityModule } from './capacity/capacity.module';
 import { entities } from './capacity/infrastructure/entities';
 import { ConfigurationModule } from './config/configuration.module';
 import { HealthModule, MetricsModule } from './observability';
@@ -59,6 +60,7 @@ type CorrelationRequest = IncomingMessage & { correlationId?: string };
       },
     }),
     AuthModule,
+    CapacityModule,
     MetricsModule,
     HealthModule,
   ],

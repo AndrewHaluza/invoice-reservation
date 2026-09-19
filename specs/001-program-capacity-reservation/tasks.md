@@ -115,7 +115,7 @@ ahead of it in the execution plan.
 ### Tests for User Story 1 ⚠️ WRITE FIRST, CONFIRM FAILING
 
 - [ ] T035 [P] [US1] **MANDATORY (Constitution VI)** Write `test/integration/concurrency.spec.ts`: 1,000 concurrent reservations against a program whose limit admits a known subset, asserting the limit is never breached, the ledger sums to the cached position, and no request fails for contention alone (SC-001, SC-003a). Must run real parallel transactions through Testcontainers — a mocked repository cannot demonstrate this
-- [ ] T036 [P] [US1] **MANDATORY (Constitution VI)** Write `test/integration/currency-mismatch.spec.ts`: a reservation in a currency with no rate is refused `FX_RATE_UNAVAILABLE`; a treasury message asserting a currency other than the program's is quarantined `CURRENCY_MISMATCH` and never converted (FR-013c, FR-013d)
+- [ ] T036 [P] [US1] **MANDATORY (Constitution VI)** Write `test/integration/currency-mismatch.spec.ts`: a reservation in a currency with no rate is refused `FX_RATE_UNAVAILABLE`
 - [ ] T037 [P] [US1] Write `test/unit/reserve-policy.spec.ts`: refuses when `position_verified` is false, when over-limit, when the converted amount rounds to zero, and when the amount exceeds available — **in that order**, each as a distinct typed outcome
 - [ ] T038 [P] [US1] Write `test/contract/reservations.contract.spec.ts` asserting `POST /v1/programs/{programId}/reservations` conforms to `contracts/http-api.yaml`, including that `amountMinor` is a string and 429/503 are reachable
 
@@ -217,6 +217,8 @@ ahead of it in the execution plan.
 - [ ] T069 [P] [US5] Write `test/integration/late-delta.spec.ts`: an incremental event whose version is **below** the applied snapshot version still applies exactly once (FR-012a). Discarding it would lose capacity permanently with no quarantine and no alert — SC-009's 0% silent loss violated by design rather than by bug
 - [ ] T070 [P] [US5] Write `test/integration/echo-suppression.spec.ts`: an event whose `reservationReference` names a reservation this service originated is skipped, so the same reservation is not counted once as `LOCAL` and again as `TREASURY` (FR-010a)
 - [ ] T071 [P] [US5] Write `test/integration/dlq.spec.ts` covering every quarantine reason — `SCHEMA_INVALID`, `UNKNOWN_PROGRAM`, `CURRENCY_MISMATCH`, `MISSING_ACK_MARKER`, `VERSION_CONFLICT`, `IMPLAUSIBLE_DELTA`, `HANDLER_FAILURE` — and asserting a **transient** failure is retried in place and never reaches the DLQ (FR-035, SC-009)
+- [ ] T036a [US5] **MANDATORY (Constitution VI)** Write `test/integration/currency-mismatch.spec.ts`: a treasury message asserting a currency other than the program's is quarantined `CURRENCY_MISMATCH` and never converted (FR-013c, FR-013d)
+  Note: moved here from Phase 3 (T036) because the Kafka consumer that can produce this quarantine outcome does not arrive until Phase 7.
 
 ### Implementation for User Story 5
 

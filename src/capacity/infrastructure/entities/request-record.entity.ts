@@ -17,10 +17,10 @@ export class RequestRecordEntity {
   @Column({
     name: 'state',
     type: 'enum',
-    enum: ['PENDING', 'COMPLETE'],
+    enum: ['PENDING', 'COMPLETE', 'EXPIRED'],
     enumName: 'request_state',
   })
-  state!: 'PENDING' | 'COMPLETE';
+  state!: 'PENDING' | 'COMPLETE' | 'EXPIRED';
 
   @Column({ name: 'outcome', type: 'jsonb', nullable: true })
   outcome!: Record<string, unknown> | null;

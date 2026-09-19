@@ -1,16 +1,20 @@
-import { Module } from '@nestjs/common';
+import { Inject, Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
+import Redis from 'ioredis';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { OrgThrottlerGuard } from './org-throttler.guard';
 import { ProgramScopeGuard } from './program-scope.guard';
 import { ScopeGuard } from './scope.guard';
 import { createThrottlerOptions } from './throttler.config';
+import { REDIS_CLIENT } from './redis.provider';
+import { RedisModule } from './redis.module';
 
 @Module({
   imports: [
+    RedisModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -19,8 +23,9 @@ import { createThrottlerOptions } from './throttler.config';
       }),
     }),
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => createThrottlerOptions(config),
+      inject: [ConfigService, REDIS_CLIENT],
+      useFactory: (config: ConfigService, client: Redis) =>
+        createThrottlerOptions(config, client),
     }),
   ],
   providers: [
@@ -33,6 +38,16 @@ import { createThrottlerOptions } from './throttler.config';
     { provide: APP_GUARD, useClass: ProgramScopeGuard },
     { provide: APP_GUARD, useClass: ScopeGuard },
   ],
-  exports: [JwtModule],
+  exports: [JwtModule, RedisModule],
 })
-export class AuthModule {}
+export class AuthModule implements OnApplicationShutdown {
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+
+  async onApplicationShutdown(): Promise<void> {
+    try {
+      await this.redis.quit();
+    } catch {
+      // The client was already closed.
+    }
+  }
+}
