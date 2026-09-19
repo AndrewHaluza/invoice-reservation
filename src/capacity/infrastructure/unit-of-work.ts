@@ -15,7 +15,7 @@ export class ProgramNotFoundError extends Error {
   }
 }
 
-interface ProgramRow {
+export interface ProgramRow {
   id: string;
   organisation_id: string;
   currency: string;
@@ -31,7 +31,7 @@ interface ProgramRow {
   position_verified: boolean;
 }
 
-function toProgramEntity(row: ProgramRow): ProgramEntity {
+export function toProgramEntity(row: ProgramRow): ProgramEntity {
   const program = new ProgramEntity();
   program.id = row.id;
   program.organisationId = row.organisation_id;

@@ -219,7 +219,7 @@ export class ReleaseService {
           reservation: toReservationBody(
             toInvoiceReservationEntity(updatedRow),
           ),
-          availability: toAvailabilityBody(programAfter, now),
+          availability: toAvailabilityBody(programAfter, false),
         };
 
         await this.idempotency.complete(
