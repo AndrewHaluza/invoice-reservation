@@ -1658,6 +1658,131 @@ Expected:
 
 ---
 
+### Task 14: Add the CI workflow
+
+#### Objective
+
+A GitHub Actions workflow running the full merge gate on every pull request and every push to
+`develop`. This is the first CI the repository has ever had.
+
+#### Files
+- `.github/workflows/ci.yml` — create. The directory `.github/workflows/` does not exist yet;
+  create it.
+
+#### Implementation
+
+**This task is deliberately last.** `npm run test:cov` exits 1 from the start of this ticket until
+Task 13 completes, because `src/` was almost empty when the 80% threshold went live in Phase 1.
+Adding this workflow any earlier would make CI red on its first run and every run after, which
+trains reviewers to ignore a failing check — worse than having no check. By this point in the plan
+the gate passes honestly.
+
+Create `.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Coverage gate
+        run: npm run test:cov
+
+      - name: Build
+        run: npm run build
+```
+
+Notes on what is deliberately absent:
+
+- **No `services:` block.** The migration, concurrency, auth, rate-limit and seed suites all use
+  Testcontainers, which starts its own Postgres, Redis and Redpanda against the Docker daemon
+  already present on `ubuntu-latest`. Declaring service containers as well would start a second,
+  unused set and give the tests a way to accidentally bind to the wrong one.
+- **No `continue-on-error` on any step**, and no `|| true`. Every step in this workflow is a merge
+  gate; a step permitted to fail is not a gate.
+- **No coverage upload or reporting service.** The threshold is enforced locally by
+  `jest.config.ts`; an external service is not needed to make the build fail.
+- **No deploy, publish or release step.** Out of scope.
+
+`npm ci` is used rather than `npm install` so the lockfile is authoritative and a drifting
+transitive dependency fails the build instead of silently changing it.
+
+The `Coverage gate` step is named separately from `Test` even though `test:cov` re-runs the same
+suites, so that a coverage failure is distinguishable at a glance from a test failure in the
+Actions UI. The extra runtime is acceptable; ambiguity about why the build is red is not.
+
+#### Constraints
+- Do not add `continue-on-error`, `|| true`, or any other softening to any step.
+- Do not lower `coverageThreshold` in `jest.config.ts` to make the Coverage gate step pass.
+- Do not add a `services:` block.
+- Do not pin the action versions below `actions/checkout@v7` and `actions/setup-node@v7`; both
+  were verified as the current major on 2026-09-19.
+- Do not add a second workflow file.
+
+#### Edge Cases
+- Testcontainers on a GitHub runner pulls images on a cold cache, which can take several minutes.
+  The 30-minute job timeout accommodates this. Do not lower it; do not add image pre-pull steps.
+- `concurrency` with `cancel-in-progress` means a force-push mid-run cancels the previous run.
+  That is intended — the cancelled run's result was about superseded code.
+- The workflow runs on `pull_request`, so it will execute against this very ticket's PR. If the
+  gate is red there, the fix belongs in whichever earlier task's code is failing, not in this
+  workflow.
+
+#### Verification
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run test:cov
+npm run build
+python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml')); print(sorted(d['jobs']['gate']['steps'][-1].keys()))"
+grep -nE "continue-on-error|\|\| true" .github/workflows/ci.yml || echo "no softening: ok"
+```
+
+Expected:
+- All five npm gates exit 0 — **including `test:cov`, which passes for the first time here.**
+- The YAML parses.
+- The grep finds no softening and prints `no softening: ok`.
+
+#### Completion Criteria
+- [ ] `.github/workflows/ci.yml` exists and is valid YAML.
+- [ ] It runs on `pull_request` and on pushes to `develop`.
+- [ ] It runs lint, typecheck, test, test:cov and build, each as its own step, none softened.
+- [ ] `actions/checkout@v7` and `actions/setup-node@v7`, Node 22.
+- [ ] `npm run test:cov` exits 0 locally.
+
+---
+
 ## Final Verification
 
 Run the whole gate set from a clean state. This is the first point in the project at which
@@ -1711,6 +1836,12 @@ Also confirm by inspection:
   match.
 - `grep -rn "algorithms: \['HS256'\]" src/auth/` → one match.
 - No file in `src/` exceeds 800 lines: `find src -name '*.ts' -exec wc -l {} + | sort -rn | head -5`.
+- `.github/workflows/ci.yml` exists, parses as YAML, and contains no `continue-on-error` or
+  `|| true`.
+
+Finally, after the ticket's branch is pushed, confirm the CI workflow actually ran and is green on
+the pull request (`gh pr checks`). A workflow file that exists but has never executed is not a
+gate. This is the first PR in the repository that will have any checks at all.
 
 ## Executor Rules
 
