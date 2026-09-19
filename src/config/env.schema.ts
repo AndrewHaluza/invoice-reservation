@@ -4,6 +4,8 @@ export const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
   PORT: Joi.number().port().default(3000),
   DATABASE_URL: Joi.string().uri().required(),
+  MIGRATION_DATABASE_URL: Joi.string().uri().optional(),
+  REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).required(),
   KAFKA_BROKERS: Joi.string().required(),
   KAFKA_SASL_USERNAME: Joi.string().required(),
   KAFKA_SASL_PASSWORD: Joi.string().required(),
