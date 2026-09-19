@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_USER: capacity
+      POSTGRES_PASSWORD: capacity_local_dev
+      POSTGRES_DB: capacity
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capacity -d capacity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.18
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --overprovisioned
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092,SASL://0.0.0.0:9093
+      - --advertise-kafka-addr
+      - PLAINTEXT://localhost:9092,SASL://localhost:9093
+      - --set
+      - redpanda.enable_sasl=true
+      - --set
+      - 'redpanda.superusers=["capacity"]'
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+      - "9644:9644"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.18
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+    network_mode: "service:redpanda"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        rpk security user create capacity --password capacity_local_dev --mechanism SCRAM-SHA-512 || true
+        rpk topic create treasury.capacity.events -p 3 -r 1 -X brokers=localhost:9092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512 || true
+        rpk topic create treasury.capacity.snapshots -p 3 -r 1 -X brokers=localhost:9092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512 || true
+        rpk topic create treasury.capacity.dlq -p 3 -r 1 -X brokers=localhost:9092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512 || true
+
+volumes:
+  pgdata:
