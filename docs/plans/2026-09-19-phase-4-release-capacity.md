@@ -10,11 +10,10 @@ exactly zero with no stranded minor units.
 
 ## Preconditions
 
-**Phase 3 is not merged as of this writing** — `src/capacity/api/` and `src/capacity/application/`
-do not exist on `develop`; phase 3 lives only as a plan plus the branch
-`karst/feat/feat-3-phase-3-reserve-capacity-…`. This plan is written against the state phase 3
-leaves behind and **must not be started until phase 3 is merged and green**. Re-verify each fact
-below by reading the repository; if any is false, stop (Executor Rules).
+**Phase 3 is at ship stage, not yet on `develop`.** Start this phase only once it has merged and
+CI is green. Re-verify each fact below by reading the repository — phase 3 changed during its own
+execution (see Carry-over below), so re-reading matters more here than usual; if any fact is
+false, stop (Executor Rules).
 
 - Phase 3 has landed: `src/capacity/api/capacity.controller.ts`,
   `src/capacity/application/reserve.service.ts`,
@@ -59,7 +58,22 @@ starting; if phase 3 already closed it, say so and move on.
    the filter. If phase 3 instead resolved this by widening a status range, the release error
    mapping in Task 4 still works, but expect phase 9's T094 to fail on the health probe.
 
-2. **`test/integration/health.spec.ts` cannot observe the above.** Its `buildApp` imports
+2. **`CachedRateProvider` caches on `${base}:${quote}` while its query is parameterised by
+   `asOf`.** Phase 3 specified both, and they contradict: the SQL selects
+   `effective_at <= $3 ORDER BY effective_at DESC LIMIT 1`, so the answer depends on `asOf`, but
+   the cache key does not. Within the 60 s TTL, a request with a different `asOf` receives the
+   entry computed for the first one.
+
+   This is not a stale read that self-corrects. The rate is written onto `invoice_reservation`
+   at reserve time, and FR-009 makes every later release reuse **that stored rate**, so one wrong
+   lookup is denominated into the ledger permanently and compounds across every repayment of that
+   invoice. Two ways to hit it: a new rate becomes effective between two reservations made in the
+   same minute (the second silently books the superseded rate), or a backdated `asOf` inside the
+   window is answered with a newer rate than it asked for.
+
+   Phase 3 shipped as specified, so the fix lands here — Task 0.
+
+3. **`test/integration/health.spec.ts` cannot observe the above.** Its `buildApp` imports
    `TestConfigModule`, `TypeOrmModule`, `AuthModule` and `HealthModule` — never `CapacityModule` —
    so `APP_FILTER` is absent and the spec asserts 503 while production returns 500. Every contract
    spec in this phase boots the production module graph for that reason (see Task 7).
@@ -84,6 +98,7 @@ starting; if phase 3 already closed it, say so and move on.
 - `src/capacity/api/dto/create-release.dto.ts` (T052)
 - The release route on the existing `CapacityController` (T053)
 - Tests T047, T048, T049
+- T103, the phase 3 FX cache carry-over (Task 0)
 
 ### Out of Scope
 
@@ -113,6 +128,41 @@ starting; if phase 3 already closed it, say so and move on.
    (`FULLY_RELEASED`, `CANCELLED`, `WRITTEN_OFF`) is refused `RESERVATION_TERMINAL` (409).
 
 ## Execution Order
+
+### Task 0: Correct the FX cache key (T103, carry-over from phase 3)
+
+`src/fx/cached-rate.provider.ts`. Keep the 60 s TTL and the `${base}:${quote}` key, but make the
+entry **answer for the `asOf` it is asked about** rather than for the one that populated it.
+
+Cache the newest row for the pair together with its `effectiveAt`, and serve it only when
+`asOf >= entry.effectiveAt`. When `asOf` is older than the cached entry, fall through to the
+parameterised query and **do not cache that result** — a historical lookup is rare and must never
+displace the hot entry.
+
+```ts
+interface Entry { readonly value: FxRate; readonly expiresAt: number }
+// hit  := entry && now < entry.expiresAt && asOf >= entry.value.effectiveAt
+// miss := query with asOf; cache it only when it is the newest row for the pair
+```
+
+Keying on `asOf` itself is **not** the fix: callers pass `new Date()`, so every request would mint
+a distinct key and the cache would never hit.
+
+What does not change: a `null` result is still not cached, `clearCache()` stays for tests, and the
+60 s TTL still means a rate inserted seconds ago may be invisible for up to a minute. That
+staleness is a deliberate trade-off and belongs in `docs/ASSUMPTIONS.md` (phase 5, Task 1) — it is
+a bounded delay in seeing a new rate, not a wrong answer to the question asked.
+
+Add to `test/unit/fx-rate-provider.spec.ts`, against a fake clock and a stub query:
+
+- two lookups for one pair with different `asOf` inside the TTL, where a rate became effective
+  between them, return **different** rates — this fails before the fix;
+- a backdated `asOf` inside the TTL does not receive the newer cached rate;
+- `asOf >= entry.effectiveAt` inside the TTL still hits the cache exactly once (the optimisation
+  survives);
+- a historical lookup does not evict or overwrite the hot entry.
+
+Verification: `npx jest test/unit/fx-rate-provider.spec.ts && npm run lint && npm run typecheck`.
 
 ### Task 1: `test/unit/release-policy.spec.ts` (T047) — WRITE FIRST, CONFIRM FAILING
 

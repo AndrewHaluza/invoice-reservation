@@ -130,6 +130,7 @@ Single NestJS service. `src/` and `test/` at repository root, per plan.md's Proj
 
 ### Tests for User Story 2 ⚠️ WRITE FIRST, CONFIRM FAILING
 
+- [ ] T103 [US2] Correct `src/fx/cached-rate.provider.ts`: the cache keys on `${base}:${quote}` while the query is parameterised by `asOf`, so within the 60 s TTL a lookup is answered with the entry another `asOf` populated. The rate is persisted onto `invoice_reservation` and reused by every later release (FR-009), so a wrong lookup is denominated into the ledger permanently. Cache the newest row with its `effectiveAt` and serve it only when `asOf >= effectiveAt`; fall through to the parameterised query otherwise and do not cache that result. Carry-over from phase 3, which shipped as specified (FR-008, FR-009)
 - [ ] T047 [P] [US2] Write `test/unit/release-policy.spec.ts`: **the `RELEASE_EXCEEDS_RESERVED` check runs on the pre-snap `Δ`** — an over-release is refused, never silently clamped (Constitution III forbids silent clamping); only then does the snap to remainder apply
 - [ ] T048 [P] [US2] Write `test/integration/release-nets-to-zero.spec.ts`: a 33333 EUR invoice against a USD program at 1.085 reserves 36166, and two instalments net to exactly zero with zero residual (SC-004a)
 - [ ] T049 [P] [US2] Write `test/contract/releases.contract.spec.ts` asserting `CURRENCY_MISMATCH` returns **409, matching both `contracts/errors.md` and the OpenAPI** — these disagreed before and a client branching on status would have been wrong either way
