@@ -27,3 +27,56 @@ supplies the real figure once the consumer knows the stream head. No wall-clock
 substitute is computed — reporting a fabricated zero for a program whose
 treasury has never been reached is the one answer that would be actively
 misleading.
+
+## The treasury consumer shares a process with the HTTP server
+
+Phase 7 runs the KafkaJS treasury consumer in the same process as the HTTP
+server. Two consequences follow. Every scale event on the HTTP deployment changes
+the consumer group membership and triggers a partition rebalance, which briefly
+pauses treasury ingestion exactly when load is highest. And the consumer's manual
+offset commit is only durable because the message's effect and the record that it
+was applied are written in the same database transaction; the shared process is
+what makes that one transaction boundary possible. The intended mitigation for
+the rebalance pause is cooperative-sticky partition assignment, which avoids
+revoking partitions a member keeps. It is not available in the pinned
+`kafkajs@2.2.4`, whose `PartitionAssigners` exports only the eager round-robin
+assigner, so the consumer selects cooperative-sticky when the dependency exposes
+it and falls back to round-robin otherwise. A separately scaled consumer
+deployment would remove the rebalance coupling entirely and preserve the
+transaction boundary, because that boundary is the shared database, not the
+shared process.
+
+## The treasury producer's partitioning key is unratified
+
+The capacity-event contract asks the treasury producer to key messages by
+`programId` so that a partition carries one program's events in order. Whether
+the producer does so is unratified. Correctness does not depend on it — deltas
+deduplicate by message identity (FR-012a) and snapshots compare versions
+(FR-012) — but throughput does: a per-program key keeps a hot program's events on
+one partition, and its absence allows them to interleave across partitions. This
+remains a question for the treasury team, not a blocker.
+
+## `lagSeconds` is still null
+
+Phase 5 recorded that `treasury.lagSeconds` is null until a stream reader exists,
+because the lag is defined against the newest message available on the stream
+(FR-007a) and no component knew the stream head. Phase 7 adds the consumer but
+still does not record the topic's high-water mark, so the stream head is still
+not known and the figure remains null. Computing it properly — reading the
+partition high-water marks and subtracting the program's recorded
+`program_stream_position` offset — is deferred, and `null` continues to mean "not
+knowable", never "current". Zero would assert the position is current; null
+asserts nothing.
+
+## Readiness reflects broker reachability, not just a crash
+
+The readiness `consumer` check is driven by KafkaJS instrumentation rather than
+by our own heartbeat: it goes `down` on CRASH, DISCONNECT and REQUEST_TIMEOUT,
+and `up` on GROUP_JOIN, HEARTBEAT and a successful (re)start. This matters
+because a paused or unreachable broker does not necessarily emit CRASH — KafkaJS
+retries internally and only the request timeout surfaces, which is why a
+broker outage flips readiness `down` roughly `requestTimeout` after it begins and
+back `up` on the next heartbeat once the broker responds. The check therefore
+fails while the consumer cannot ingest, and it no longer stays `up` through an
+outage. A single stalled request can briefly flip the check, which is an honest
+reflection of a request that exceeded the KafkaJS timeout.
