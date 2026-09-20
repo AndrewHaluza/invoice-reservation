@@ -2,6 +2,7 @@ import {
   PermanentTreasuryError,
   RetryExhaustedError,
   classifyFailure,
+  isTransientFailure,
   withRetry,
 } from '../../src/treasury/retry/failure-classifier';
 
@@ -33,6 +34,52 @@ describe('classifyFailure', () => {
     expect(classifyFailure('a plain string')).toBe('TRANSIENT');
     expect(classifyFailure(null)).toBe('TRANSIENT');
     expect(classifyFailure({ code: 42 })).toBe('TRANSIENT');
+  });
+});
+
+describe('isTransientFailure', () => {
+  it('is false for a code-less ordinary error', () => {
+    expect(isTransientFailure(new Error('no code here'))).toBe(false);
+  });
+
+  it('reads a SQLSTATE code off a TypeORM QueryFailedError-style driverError', () => {
+    const driverError = Object.assign(new Error('too many connections'), {
+      code: '53300',
+    });
+    expect(isTransientFailure(Object.assign(new Error('query failed'), { driverError }))).toBe(
+      true,
+    );
+  });
+
+  it('treats a code-less pg-pool connect timeout as transient by message', () => {
+    expect(isTransientFailure(new Error('timeout exceeded when trying to connect'))).toBe(
+      true,
+    );
+  });
+
+  it('treats a code-less pg dropped-connection error as transient by message', () => {
+    expect(
+      isTransientFailure(new Error('Connection terminated unexpectedly')),
+    ).toBe(true);
+    expect(
+      isTransientFailure(
+        new Error('Client has encountered a connection error and is not queryable'),
+      ),
+    ).toBe(true);
+  });
+
+  it('covers the whole transient SQLSTATE classes by prefix', () => {
+    // 08 connection failure, 53 too many connections, 55 lock not available,
+    // 57 admin shutdown, 58 system error.
+    for (const code of ['08001', '53400', '55P04', '57P01', '58030']) {
+      expect(isTransientFailure(Object.assign(new Error('x'), { code }))).toBe(true);
+    }
+  });
+
+  it('does not treat a non-contention transaction-rollback code as transient', () => {
+    expect(isTransientFailure(Object.assign(new Error('x'), { code: '40002' }))).toBe(
+      false,
+    );
   });
 });
 

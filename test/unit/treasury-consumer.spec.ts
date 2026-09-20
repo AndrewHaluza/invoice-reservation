@@ -111,6 +111,14 @@ function fixedHandler(outcome: unknown): CapacityEventHandler {
   return { handle: async () => outcome } as unknown as CapacityEventHandler;
 }
 
+function throwingHandler(error: Error): CapacityEventHandler {
+  return {
+    handle: async () => {
+      throw error;
+    },
+  } as unknown as CapacityEventHandler;
+}
+
 function committer(): MessageCommitter & { committed: string[] } {
   const committed: string[] = [];
   return {
@@ -359,5 +367,46 @@ describe('TreasuryConsumer.processMessage correlation ids', () => {
 
     expect(dlq.records[0]?.correlationId).toBe('from-buffer');
     expect(dlq.records[1]?.correlationId).toBeNull();
+  });
+
+  it('rethrows a code-less transient failure without DLQ publish or offset commit (FR-035)', async () => {
+    const dlq = new RecordingDlq();
+    const consumer = new TreasuryConsumer(
+      // pg-pool's connect timeout is a plain Error with no `code`.
+      throwingHandler(new Error('timeout exceeded when trying to connect')),
+      dlq,
+      RETRY,
+      config({ NODE_ENV: 'test' }),
+    );
+    const c = committer();
+
+    await expect(
+      consumer.processMessage(
+        { topic: 't', partition: 0, offset: '1', key: null, value: null, headers: {} },
+        c,
+      ),
+    ).rejects.toThrow();
+
+    expect(dlq.records).toHaveLength(0);
+    expect(c.committed).toHaveLength(0);
+  });
+
+  it('quarantines an unrecognised (non-transient) handler failure and commits its offset', async () => {
+    const dlq = new RecordingDlq();
+    const consumer = new TreasuryConsumer(
+      throwingHandler(new Error('boom')),
+      dlq,
+      RETRY,
+      config({ NODE_ENV: 'test' }),
+    );
+    const c = committer();
+
+    await consumer.processMessage(
+      { topic: 't', partition: 0, offset: '1', key: null, value: null, headers: {} },
+      c,
+    );
+
+    expect(dlq.records[0]?.reason).toBe('HANDLER_FAILURE');
+    expect(c.committed).toEqual(['1']);
   });
 });
