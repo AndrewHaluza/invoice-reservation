@@ -15,18 +15,27 @@ client could reserve and immediately read a stale position. Reads therefore take
 the same connection as writes; this is a constraint, not a configuration detail
 to be tuned later.
 
-## `lagSeconds` is null until a stream reader exists
+## `lagSeconds` is measured by a probe consumer in its own group
 
-FR-007a defines the treasury lag against the newest message available on the
-treasury stream. Phase 5 has no stream consumer and so cannot know the stream
-head, which means it cannot compute that lag. The contract was amended so
-`treasury.lagSeconds` is `type: [number, 'null']`: **null means the lag is not
-knowable, and is never the same as zero.** Zero would assert that the position
-is current; null asserts nothing. Phase 5 emits null unconditionally and phase 7
-supplies the real figure once the consumer knows the stream head. No wall-clock
-substitute is computed — reporting a fabricated zero for a program whose
-treasury has never been reached is the one answer that would be actively
-misleading.
+`lagSeconds` is measured by a probe consumer in a dedicated consumer group that
+reads the head of both treasury topics and records, per program, the newest
+`effectiveAt` from the payload into a process-local registry. The reported value
+is the whole seconds between `program.treasury_applied_effective_at` — advanced
+by both the event and snapshot apply paths — and the newest effective time *this
+process* has observed for *that program*. Both operands are business effective
+times, not wall clocks. It is null when no treasury message has been applied to
+the program, or the process has observed none for it since starting: the probe
+subscribes from the latest offset and does not read history.
+
+If the assumption behind this is wrong, a just-restarted process reports null
+rather than a figure until the next message for that program, so a client cannot
+distinguish "recently restarted" from "no treasury state"; a stalled processing
+consumer is still detected, because the probe runs in its own group and keeps
+observing.
+
+It is detected by `test/integration/stream-lag.spec.ts`, which covers the
+registry and probe, and by the SC-002a gate, which asserts `lagSeconds === 0` on
+a caught-up running application.
 
 ## The treasury consumer shares a process with the HTTP server
 
@@ -55,18 +64,6 @@ deduplicate by message identity (FR-012a) and snapshots compare versions
 (FR-012) — but throughput does: a per-program key keeps a hot program's events on
 one partition, and its absence allows them to interleave across partitions. This
 remains a question for the treasury team, not a blocker.
-
-## `lagSeconds` is still null
-
-Phase 5 recorded that `treasury.lagSeconds` is null until a stream reader exists,
-because the lag is defined against the newest message available on the stream
-(FR-007a) and no component knew the stream head. Phase 7 adds the consumer but
-still does not record the topic's high-water mark, so the stream head is still
-not known and the figure remains null. Computing it properly — reading the
-partition high-water marks and subtracting the program's recorded
-`program_stream_position` offset — is deferred, and `null` continues to mean "not
-knowable", never "current". Zero would assert the position is current; null
-asserts nothing.
 
 ## Readiness reflects broker reachability, not just a crash
 

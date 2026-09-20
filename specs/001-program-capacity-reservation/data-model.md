@@ -39,6 +39,7 @@ A committed credit facility, plus the derived position cache (research R3).
 | `over_limit_since` | `TIMESTAMPTZ NULL` | Non-null ⇒ program is over-limit |
 | `treasury_version` | `BIGINT NOT NULL DEFAULT 0` | Highest applied **snapshot** version (FR-012) |
 | `treasury_effective_at` | `TIMESTAMPTZ NULL` | Effective time of that state |
+| `treasury_applied_effective_at` | `TIMESTAMPTZ NULL` | Effective time of the newest treasury message applied to this program, from either topic; distinct from `treasury_effective_at`, which records the last applied snapshot only; null until a treasury message has been applied |
 | `position_changed_at` | `TIMESTAMPTZ NOT NULL` | Local commit time (FR-007a) |
 | `investigation_required` | `BOOLEAN NOT NULL DEFAULT FALSE` | Set by the FR-019b invariant check |
 | `position_verified` | `BOOLEAN NOT NULL DEFAULT TRUE` | `FALSE` ⇒ writes refused, `POSITION_UNVERIFIED` (FR-019e) |

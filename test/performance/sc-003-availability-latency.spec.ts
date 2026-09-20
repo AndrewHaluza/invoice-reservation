@@ -72,6 +72,7 @@ describe('SC-003 availability read latency at 200 concurrent clients', () => {
     setEnv('DATABASE_URL', postgres.ownerUrl);
     setEnv('REDIS_URL', redis.url);
     setEnv('KAFKA_BROKERS', 'localhost:9093');
+    setEnv('KAFKA_LAG_PROBE_ENABLED', 'false');
     setEnv('KAFKA_SASL_USERNAME', 'capacity');
     setEnv('KAFKA_SASL_PASSWORD', 'capacity_local_dev');
     setEnv('JWT_SECRET', JWT_SECRET);

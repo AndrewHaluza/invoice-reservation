@@ -26,6 +26,7 @@ export interface ProgramRow {
   over_limit_since: Date | null;
   treasury_version: string;
   treasury_effective_at: Date | null;
+  treasury_applied_effective_at: Date | null;
   position_changed_at: Date;
   investigation_required: boolean;
   position_verified: boolean;
@@ -43,6 +44,7 @@ export function toProgramEntity(row: ProgramRow): ProgramEntity {
   program.overLimitSince = row.over_limit_since;
   program.treasuryVersion = BigInt(row.treasury_version);
   program.treasuryEffectiveAt = row.treasury_effective_at;
+  program.treasuryAppliedEffectiveAt = row.treasury_applied_effective_at;
   program.positionChangedAt = row.position_changed_at;
   program.investigationRequired = row.investigation_required;
   program.positionVerified = row.position_verified;

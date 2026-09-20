@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { StreamLagRegistry } from '../../shared/stream-lag';
 import { CapacityRefusal } from '../domain/errors';
 import { ProgramRepository } from '../infrastructure/repositories/program.repository';
 import { AvailabilityBody, toAvailabilityBody } from './availability.projection';
@@ -13,6 +14,7 @@ export class AvailabilityService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly programRepository: ProgramRepository,
+    private readonly streamLag: StreamLagRegistry,
   ) {}
 
   // Pure assembly: a plain SELECT with no row lock. The position columns are only
@@ -28,7 +30,11 @@ export class AvailabilityService {
     }
 
     const reconciliationPending = await this.reconciliationPending(programId);
-    return toAvailabilityBody(program, reconciliationPending);
+    return toAvailabilityBody(
+      program,
+      reconciliationPending,
+      this.streamLag.newestObservedFor(program.id),
+    );
   }
 
   // Derived at read time, never stored. True when the most recently applied

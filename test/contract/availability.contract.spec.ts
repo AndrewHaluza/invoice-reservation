@@ -105,6 +105,7 @@ describe('availability and audit read contract', () => {
     setEnv('DATABASE_URL', postgres.ownerUrl);
     setEnv('REDIS_URL', redis.url);
     setEnv('KAFKA_BROKERS', 'localhost:9093');
+    setEnv('KAFKA_LAG_PROBE_ENABLED', 'false');
     setEnv('KAFKA_SASL_USERNAME', 'capacity');
     setEnv('KAFKA_SASL_PASSWORD', 'capacity_local_dev');
     setEnv('JWT_SECRET', JWT_SECRET);
@@ -154,7 +155,7 @@ describe('availability and audit read contract', () => {
     await postgres?.stop();
   });
 
-  it('200 validates against Availability and reports every field the schema requires', async () => {
+  it('reports a null lag for a program with no applied treasury message', async () => {
     const organisationId = await createOrganisation('availability-shape');
     const programId = await createProgram(organisationId, 1_000_000_000n);
     const token = tokenFor(organisationId, 'capacity:read');

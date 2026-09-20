@@ -21,6 +21,7 @@ import { LedgerRepository } from './infrastructure/repositories/ledger.repositor
 import { ProgramRepository } from './infrastructure/repositories/program.repository';
 import { ProgramStreamPositionRepository } from './infrastructure/repositories/program-stream-position.repository';
 import { UnitOfWork } from './infrastructure/unit-of-work';
+import { StreamLagRegistry } from '../shared/stream-lag';
 
 @Module({
   controllers: [CapacityController, AuditController],
@@ -41,9 +42,15 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
     ReconciliationCheckJob,
     RecoveryDetectionService,
     RequestRetentionJob,
+    StreamLagRegistry,
     { provide: FX_RATE_PROVIDER, useClass: CachedRateProvider },
     { provide: APP_FILTER, useClass: CapacityErrorFilter },
   ],
-  exports: [ApplyTreasuryEventService, ApplySnapshotService, ProgramStreamPositionRepository],
+  exports: [
+    ApplyTreasuryEventService,
+    ApplySnapshotService,
+    ProgramStreamPositionRepository,
+    StreamLagRegistry,
+  ],
 })
 export class CapacityModule {}

@@ -416,10 +416,14 @@ components:
           properties:
             appliedVersion: { type: integer, format: int64 }
             effectiveAt: { type: [string, 'null'], format: date-time }
-            # Null until a stream reader can compute the figure against the
-            # stream head. Null asserts nothing; zero would assert the position
-            # is current, which phase 5 cannot know.
-            lagSeconds: { type: [number, 'null'], minimum: 0 }
+            lagSeconds:
+              type: [number, 'null']
+              minimum: 0
+              description: >
+                The whole seconds between the newest treasury message applied to this program and
+                the newest one available for it on the stream. Null when no treasury message has
+                been applied or the serving process has observed none for this program; null is
+                never the same as zero.
 
     ReservationRequest:
       type: object

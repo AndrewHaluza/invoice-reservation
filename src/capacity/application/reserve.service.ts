@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { reservationOutcomesTotal } from '../../observability/metrics';
+import { StreamLagRegistry } from '../../shared/stream-lag';
 import { CapacityRefusal } from '../domain/errors';
 import { PendingLedgerEntry } from '../domain/ledger-entry';
 import {
@@ -87,6 +88,7 @@ export class ReserveService {
     private readonly programRepository: ProgramRepository,
     private readonly idempotency: IdempotencyService,
     @Inject(FX_RATE_PROVIDER) private readonly fxRateProvider: FxRateProvider,
+    private readonly streamLag: StreamLagRegistry,
   ) {}
 
   async reserve(command: ReserveCommand): Promise<ReserveOutcome> {
@@ -221,7 +223,11 @@ export class ReserveService {
           reservation: toReservationBody(
             toInvoiceReservationEntity(insertedRow),
           ),
-          availability: toAvailabilityBody(programAfter, false),
+          availability: toAvailabilityBody(
+            programAfter,
+            false,
+            this.streamLag.newestObservedFor(programAfter.id),
+          ),
         };
 
         await this.idempotency.complete(

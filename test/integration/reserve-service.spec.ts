@@ -14,6 +14,7 @@ import {
 } from '../../src/capacity/application/reserve.service';
 import { ProgramRepository } from '../../src/capacity/infrastructure/repositories/program.repository';
 import { UnitOfWork } from '../../src/capacity/infrastructure/unit-of-work';
+import { StreamLagRegistry } from '../../src/shared/stream-lag';
 import { PostgresFixture, startPostgres } from '../support/postgres-container';
 
 jest.setTimeout(180_000);
@@ -138,6 +139,7 @@ describe('ReserveService', () => {
       new ProgramRepository(),
       new IdempotencyService(),
       new CachedRateProvider(ds),
+      new StreamLagRegistry(),
     );
   });
 

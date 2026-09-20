@@ -349,6 +349,23 @@ it was, as designed, unauthenticated.
 - *Payload HMAC.* Useful defence in depth and worth adding later, but it authenticates the message
   rather than the connection, and leaves the broker itself open to writes.
 
+**Deviation as implemented**: Locally the service authenticates with SCRAM-SHA-512
+(`KAFKA_SASL_USERNAME`/`KAFKA_SASL_PASSWORD`) over Redpanda's plaintext `SASL://` listener, with
+`redpanda.enable_sasl=true` and the `capacity` superuser set (`docker-compose.yml:57,60-63`); no TLS
+listener is configured. Production adds `ssl: true` alongside the same SCRAM credentials
+(`src/treasury/kafka.config.ts:20`). mTLS is **not** implemented — R11 requires "`SASL_SSL`
+(SCRAM-SHA-512) **or** mTLS", so SCRAM-SHA-512 satisfies the decision on its own. The automated test
+broker goes further and disables SASL entirely: `@testcontainers/redpanda` renders
+`authentication_method: none` and offers no way to enable it, so the harness sets
+`KAFKA_SASL_DISABLED=true` and the consumer connects unauthenticated. That key defaults to `false`
+and is set only by test harness code, never by compose or production.
+
+Local TLS was not wired deliberately: self-signed certificates in compose are brittle to maintain and
+defend nothing on a loopback interface. The risk R11 was written for — unauthenticated produce access
+letting an attacker inject a fabricated snapshot — is closed by SCRAM, which *is* exercised locally;
+TLS would add confidentiality and a second credential, not the authorization boundary the ACLs rest
+on. This is documented operationally in `docs/kafka-acls.md`.
+
 ---
 
 ## R12. Rate limiting

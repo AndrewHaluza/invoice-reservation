@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { AvailabilityService } from '../../src/capacity/application/availability.service';
 import { ProgramRepository } from '../../src/capacity/infrastructure/repositories/program.repository';
 import { dataSourceOptions } from '../../src/config/data-source';
+import { StreamLagRegistry } from '../../src/shared/stream-lag';
 import { PostgresFixture, startPostgres } from '../support/postgres-container';
 import {
   buildTreasuryHarness,
@@ -23,6 +24,8 @@ interface ProgramRow {
   credit_limit_minor: string;
   over_limit_since: Date | null;
   investigation_required: boolean;
+  treasury_effective_at: Date | null;
+  treasury_applied_effective_at: Date | null;
 }
 
 interface LedgerRow {
@@ -48,7 +51,9 @@ describe('Snapshot decomposition (T081)', () => {
               local_reserved_minor::text AS local_reserved_minor,
               credit_limit_minor::text AS credit_limit_minor,
               over_limit_since,
-              investigation_required
+              investigation_required,
+              treasury_effective_at,
+              treasury_applied_effective_at
          FROM program WHERE id = $1`,
       [programId],
     );
@@ -140,6 +145,10 @@ describe('Snapshot decomposition (T081)', () => {
       BigInt(program.treasury_reserved_minor) +
         BigInt(program.local_reserved_minor),
     ).toBe(4_000_000n);
+
+    expect(program.treasury_applied_effective_at).toEqual(
+      program.treasury_effective_at,
+    );
 
     const adjustments = await readAdjustments(programId);
     expect(adjustments).toHaveLength(1);
@@ -374,7 +383,11 @@ describe('Snapshot decomposition (T081)', () => {
       ),
     ).resolves.toEqual({ kind: 'applied' });
 
-    const availability = new AvailabilityService(ds, new ProgramRepository());
+    const availability = new AvailabilityService(
+      ds,
+      new ProgramRepository(),
+      new StreamLagRegistry(),
+    );
     const body = await availability.forProgram(programId);
     expect(body.reconciliationPending).toBe(true);
   });

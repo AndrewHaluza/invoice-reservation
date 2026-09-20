@@ -49,4 +49,16 @@ describe('buildKafkaConfig', () => {
       /KAFKA_BROKERS/,
     );
   });
+
+  it('omits the sasl block when KAFKA_SASL_DISABLED is true', () => {
+    const config = buildKafkaConfig(
+      configFrom({
+        KAFKA_BROKERS: 'broker-a:9092',
+        KAFKA_SASL_DISABLED: 'true',
+        NODE_ENV: 'development',
+      }),
+    );
+
+    expect(config).not.toHaveProperty('sasl');
+  });
 });
