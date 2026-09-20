@@ -57,8 +57,16 @@ down when the API exits (`KARST_KEEP_STACK=1` opts out), but Karst stops a servi
 untrappable `SIGKILL`, so a stack can outlive its ticket; `reap` — which also runs automatically at
 the start of every `up` — removes any stack whose worktree directory is gone.
 
-The seed prints two bearer tokens: `ACME_TOKEN` (owns programs A and B) and `OTHER_TOKEN` (owns
-program C). Keep both — the cross-tenant check needs them.
+The seed prints one block per organisation: an `organisation=<name> id=<uuid>` line followed by a
+`token=<jwt>` line. Northwind's token owns programs A and B; Contoso's token owns program C. The
+program IDs are fixed, so export the ones the scenarios use:
+
+```bash
+export ACME_TOKEN=<Northwind token from the seed output>   # owns programs A and B
+export OTHER_TOKEN=<Contoso token from the seed output>    # owns program C
+export P=b1b2c3d4-0001-4000-8000-000000000011             # program A (Northwind, USD)
+export PC=b1b2c3d4-0003-4000-8000-000000000013            # program C (Contoso, USD)
+```
 
 Confirm readiness:
 
@@ -72,7 +80,7 @@ curl -s localhost:3000/health/ready | jq
 
 ```bash
 export T=$ACME_TOKEN
-export P=<program A id from the seed output>
+export P=b1b2c3d4-0001-4000-8000-000000000011
 
 # Availability starts at the full $10,000,000 limit
 curl -s -H "Authorization: Bearer $T" localhost:3000/v1/programs/$P/availability | jq
@@ -174,7 +182,17 @@ strands no minor units.
 
 ## Scenario 5 — Cancellation is distinguishable from repayment (US3, FR-026)
 
+The cause is derived from what already happened to the reservation, never from the caller's
+`reason`: an untouched reservation is *cancelled*, one with repaid capacity is *written off* for the
+part the invoice still owed. Repay part of INV-2, then write off the remainder.
+
 ```bash
+# Repay 40,000,000 of INV-2 — recorded with cause RELEASE
+curl -s -X POST -H "Authorization: Bearer $T" -H "Idempotency-Key: demo-rel-2" \
+  -H 'Content-Type: application/json' -d '{"amount":{"amountMinor":"40000000","currency":"USD"}}' \
+  localhost:3000/v1/programs/$P/reservations/INV-2/releases > /dev/null
+
+# Write off the remaining 60,000,000 — recorded with cause WRITE_OFF
 curl -s -X POST -H "Authorization: Bearer $T" -H "Idempotency-Key: cancel-1" \
   -H 'Content-Type: application/json' -d '{"reason":"WRITTEN_OFF","note":"buyer insolvent"}' \
   localhost:3000/v1/programs/$P/reservations/INV-2/cancellation | jq -r '.reservation.status'
@@ -182,58 +200,92 @@ curl -s -X POST -H "Authorization: Bearer $T" -H "Idempotency-Key: cancel-1" \
 curl -s -H "Authorization: Bearer $T" "localhost:3000/v1/programs/$P/ledger?cause=WRITE_OFF" | jq '.items'
 ```
 
-**Expected**: status `WRITTEN_OFF`; a ledger entry with cause `WRITE_OFF`, not `RELEASE`.
+**Expected**: status `WRITTEN_OFF`; the write-off appears with cause `WRITE_OFF`, kept separate from
+the `RELEASE` that recorded the repayment. Summing INV-2's entries (reservation, release, write-off)
+nets to zero — a write-off is not a repayment.
 
 ---
 
 ## Scenario 6 — Treasury event and snapshot (US5, US6)
 
+Incremental events are deduplicated by message identity and never advance the snapshot-version
+marker; snapshots are compared by version, and a superseded one is ignored. Both source topics are
+produced to over the in-container `INTERNAL` listener, authenticated as the treasury principal.
+
 ```bash
-# Raise the limit to $12,000,000
-docker compose exec redpanda rpk topic produce treasury.capacity.events -k "$P" <<< "$(cat <<JSON
-{"messageId":"evt-1","programId":"$P","version":1,"effectiveAt":"2026-09-19T10:00:00Z",
- "type":"LIMIT_CHANGED","payload":{"amountMinor":"1200000000","currency":"USD"}}
+# Raise the limit to $12,000,000 — LIMIT_CHANGED is an incremental delta, version 1
+docker compose exec -T redpanda rpk topic produce treasury.capacity.events -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"evt-0001","programId":"$P","version":1,"effectiveAt":"2026-09-19T10:00:00Z","type":"LIMIT_CHANGED","payload":{"amountMinor":"1200000000","currency":"USD"}}
 JSON
-)"
 
 sleep 2 && curl -s -H "Authorization: Bearer $T" localhost:3000/v1/programs/$P/availability \
   | jq '.creditLimit.amountMinor, .treasury.appliedVersion, .treasury.lagSeconds'
 ```
 
-**Expected**: limit `"1200000000"`, `appliedVersion` `1`, a small `lagSeconds`.
+**Expected**: limit `"1200000000"`. `appliedVersion` is `0`: a delta is not a snapshot and never
+moves the snapshot-version marker, so a snapshot that arrives later is compared against other
+snapshots, not against this event. `lagSeconds` is `null` — no stream high-water mark is recorded,
+so the lag is unknowable, and `null` is not the same as zero.
 
 ```bash
-# Replay the identical message byte-for-byte — must have no second effect
-docker compose exec redpanda rpk topic produce treasury.capacity.events -k "$P" <<< "$(cat <<'JSON'
-{"messageId":"evt-1","programId":"PROGRAM_ID","version":1,"effectiveAt":"2026-09-19T10:00:00Z",
- "type":"LIMIT_CHANGED","payload":{"amountMinor":"1200000000","currency":"USD"}}
+# Replay the identical message byte-for-byte — deduplicated by identity, no second effect
+docker compose exec -T redpanda rpk topic produce treasury.capacity.events -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"evt-0001","programId":"$P","version":1,"effectiveAt":"2026-09-19T10:00:00Z","type":"LIMIT_CHANGED","payload":{"amountMinor":"1200000000","currency":"USD"}}
 JSON
-)"
 
-# A snapshot OLDER than the applied state — must be ignored
-docker compose exec redpanda rpk topic produce treasury.capacity.snapshots -k "$P" <<< "$(cat <<'JSON'
-{"messageId":"snap-old","programId":"PROGRAM_ID","version":0,"effectiveAt":"2026-09-19T09:00:00Z",
- "currency":"USD","creditLimitMinor":"1000000000","reservedMinor":"0",
- "acknowledgement":{"kind":"WATERMARK","ingestedThrough":"2026-09-19T09:00:00Z"}}
+# A fresh snapshot at version 1 establishes the applied snapshot version...
+docker compose exec -T redpanda rpk topic produce treasury.capacity.snapshots -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"snap-new","programId":"$P","version":1,"effectiveAt":"2026-09-19T10:00:00Z","currency":"USD","creditLimitMinor":"1200000000","reservedMinor":"0","acknowledgement":{"kind":"WATERMARK","ingestedThrough":"2026-09-19T10:00:00Z"}}
 JSON
-)"
 
-# A late INCREMENTAL event below the applied version — must still apply (FR-012a)
-docker compose exec redpanda rpk topic produce treasury.capacity.events -k "$P" <<< "$(cat <<'JSON'
-{"messageId":"evt-late","programId":"PROGRAM_ID","version":0,"effectiveAt":"2026-09-19T09:30:00Z",
- "type":"RESERVATION_BOOKED","payload":{"amountMinor":"200000","currency":"USD",
- "reservationReference":"treasury-own-1"}}
+# ...so a snapshot OLDER than it (version 0) is ignored
+docker compose exec -T redpanda rpk topic produce treasury.capacity.snapshots -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"snap-old","programId":"$P","version":0,"effectiveAt":"2026-09-19T09:00:00Z","currency":"USD","creditLimitMinor":"1000000000","reservedMinor":"0","acknowledgement":{"kind":"WATERMARK","ingestedThrough":"2026-09-19T09:00:00Z"}}
 JSON
-)"
+
+sleep 2 && curl -s -H "Authorization: Bearer $T" localhost:3000/v1/programs/$P/availability \
+  | jq '.creditLimit.amountMinor, .treasury.appliedVersion'
 ```
 
-**Expected**: the replayed event and the old snapshot both leave the figures unchanged. The late
-*incremental* event **does** apply, raising treasury reserved by 200000 — a delta asserts a change,
-not a state, and discarding it would lose that capacity permanently and silently.
+**Expected**: the replayed event and the old snapshot both leave the figures unchanged — the limit
+stays `"1200000000"` and `appliedVersion` stays `1`. A snapshot asserts absolute state, so a
+superseded one carries no information; an older *incremental* event, by contrast, must never be
+discarded.
 
 ```bash
-# A snapshot with no acknowledgement marker is quarantined, not applied
-docker compose exec redpanda rpk topic consume treasury.capacity.dlq --num 1 | jq
+# A late INCREMENTAL event below the applied version — must still apply (FR-012a)
+docker compose exec -T redpanda rpk topic produce treasury.capacity.events -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"evt-late","programId":"$P","version":0,"effectiveAt":"2026-09-19T09:30:00Z","type":"RESERVATION_BOOKED","payload":{"amountMinor":"200000","currency":"USD","reservationReference":"treasury-own-1"}}
+JSON
+
+sleep 2 && curl -s -H "Authorization: Bearer $T" localhost:3000/v1/programs/$P/availability \
+  | jq '.reserved.treasury.amountMinor'
+```
+
+**Expected**: treasury reserved rises by `200000` — a delta asserts a change, not a state, and
+discarding it would lose that capacity permanently and silently.
+
+```bash
+# A snapshot with no acknowledgement marker is quarantined, not applied (FR-011b)
+docker compose exec -T redpanda rpk topic produce treasury.capacity.snapshots -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"snap-no-ack","programId":"$P","version":2,"effectiveAt":"2026-09-19T13:00:00Z","currency":"USD","creditLimitMinor":"1200000000","reservedMinor":"0"}
+JSON
+
+sleep 2 && docker compose exec -T redpanda rpk topic consume treasury.capacity.dlq --num 1 --offset start \
+  -X brokers=localhost:19092 -X user=ops -X pass=ops_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 | jq '.headers'
 ```
 
 **Expected**: the message appears on the DLQ with reason `MISSING_ACK_MARKER`, and the program is
@@ -251,18 +303,17 @@ curl -s -X POST -H "Authorization: Bearer $T" -H "Idempotency-Key: snap-res-1" \
   localhost:3000/v1/programs/$P/reservations > /dev/null
 
 # Snapshot asserting 3,500,000 reserved, watermarked BEFORE that reservation was confirmed
-docker compose exec redpanda rpk topic produce treasury.capacity.snapshots -k "$P" <<< "$(cat <<'JSON'
-{"messageId":"snap-1","programId":"PROGRAM_ID","version":10,"effectiveAt":"2026-09-19T11:00:00Z",
- "currency":"USD","creditLimitMinor":"1200000000","reservedMinor":"3500000",
- "acknowledgement":{"kind":"WATERMARK","ingestedThrough":"2026-09-19T10:00:00Z"}}
+docker compose exec -T redpanda rpk topic produce treasury.capacity.snapshots -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"snap-0001","programId":"$P","version":10,"effectiveAt":"2026-09-19T11:00:00Z","currency":"USD","creditLimitMinor":"1200000000","reservedMinor":"3500000","acknowledgement":{"kind":"WATERMARK","ingestedThrough":"2026-09-19T10:00:00Z"}}
 JSON
-)"
 
 sleep 2
 curl -s -H "Authorization: Bearer $T" localhost:3000/v1/programs/$P/availability \
   | jq '.reserved.total.amountMinor, .reserved.local.amountMinor, .reserved.treasury.amountMinor'
 
-curl -s -H "Authorization: Bearer $AUDIT_T" \
+curl -s -H "Authorization: Bearer $T" \
   "localhost:3000/v1/programs/$P/ledger?cause=RECONCILIATION_ADJUSTMENT" | jq '.items'
 ```
 
@@ -277,38 +328,46 @@ was wrong. Summing the ledger per component reproduces all three reported figure
 ## Scenario 9 — Limit cut below local reservations is recorded, not rejected (FR-011c)
 
 ```bash
-# With 8,000,000 reserved locally, treasury cuts the facility to 5,000,000
-docker compose exec redpanda rpk topic produce treasury.capacity.events -k "$P" <<< "$(cat <<'JSON'
-{"messageId":"evt-cut","programId":"PROGRAM_ID","version":20,"effectiveAt":"2026-09-19T12:00:00Z",
- "type":"LIMIT_CHANGED","payload":{"amountMinor":"500000000","currency":"USD"}}
+# 4,000,000 is reserved (500,000 local + 3,500,000 treasury) after scenarios 6–7; treasury cuts
+# the facility to 3,000,000, below the reserved total
+docker compose exec -T redpanda rpk topic produce treasury.capacity.events -k "$P" \
+  -X brokers=localhost:19092 -X user=treasury -X pass=treasury_local_dev \
+  -X sasl.mechanism=SCRAM-SHA-512 <<JSON
+{"messageId":"evt-cut-01","programId":"$P","version":20,"effectiveAt":"2026-09-19T12:00:00Z","type":"LIMIT_CHANGED","payload":{"amountMinor":"3000000","currency":"USD"}}
 JSON
-)"
 
 sleep 2
 curl -s -H "Authorization: Bearer $T" localhost:3000/v1/programs/$P/availability \
-  | jq '.creditLimit.amountMinor, .available.amountMinor, .overLimit'
+  | jq '.creditLimit.amountMinor, .available.amountMinor, .overLimit.active'
 ```
 
-**Expected**: the limit **is** lowered, `available` is reported as a negative number, and
-`overLimit` is true. New reservations are refused with `PROGRAM_OVER_LIMIT` until the position
-returns within the limit, at which point the mark clears on the next position change without
-operator action. The cut is never rejected — treasury is the system of record for the limit, and
-refusing it would leave the service lending against a facility that no longer exists.
+**Expected**: the limit **is** lowered to `"3000000"`, `available` is reported as a negative number
+(`"-1000000"`), and `overLimit.active` is `true`. New reservations are refused with
+`PROGRAM_OVER_LIMIT` until the position returns within the limit, at which point the mark clears on
+the next position change without operator action. The cut is never rejected — treasury is the system
+of record for the limit, and refusing it would leave the service lending against a facility that no
+longer exists.
 
 ---
 
 ## Scenario 10 — Rate limiting (FR-033)
 
 ```bash
-for i in $(seq 1 200); do
+for i in $(seq 1 700); do
   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $T" \
     localhost:3000/v1/programs/$P/availability
 done | sort | uniq -c
 ```
 
-**Expected**: a mix of `200` and `429`. The `429` responses carry `Retry-After`. Repeating the
-loop with `$OTHER_TOKEN` concurrently still returns `200` — the budget is per organisation, so one
-tenant cannot exhaust another's.
+**Expected**: a mix of `200` and `429` — the loop must exceed the 600/min read budget for a `429` to
+be reachable at all. The `429` responses carry `Retry-After`. The budget is per organisation: with
+`$T` exhausted, a request carrying `$OTHER_TOKEN` against its own program C (`$PC`) still returns
+`200`, so one tenant cannot exhaust another's.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $OTHER_TOKEN" \
+  localhost:3000/v1/programs/$PC/availability
+```
 
 ---
 
@@ -349,10 +408,10 @@ pass against mocks:
 ### Additional gates worth running before calling it done
 
 ```bash
-npm run test:contract     # OpenAPI conformance + enumerates every route to prove auth AND scope (SC-007/007a)
+npx jest test/contract    # OpenAPI conformance + enumerates every route to prove auth AND scope (SC-007/007a)
 npm run audit:ledger      # scripts/audit-ledger.ts — asserts position == Σ ledger per component (SC-004)
 npm run test:recovery     # test/integration/ledger-recovery.spec.ts — restore, resume, assert no loss (SC-010)
-npm run test:migration    # up then down then up; the Constitution merge gate
+npx jest test/migration   # up then down then up; the Constitution merge gate
 npm run test:perf         # SC-002, SC-002a, SC-003, SC-003a — release gate, not per-commit
 ```
 

@@ -88,10 +88,25 @@ services:
       - |
         set -e
         rpk security user create capacity --password capacity_local_dev --mechanism SCRAM-SHA-512 || true
+        rpk security user create treasury --password treasury_local_dev --mechanism SCRAM-SHA-512 || true
+        rpk security user create ops --password ops_local_dev --mechanism SCRAM-SHA-512 || true
         RPK="rpk topic create -p 3 -r 1 -X brokers=localhost:19092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512"
         $$RPK treasury.capacity.events || true
         $$RPK treasury.capacity.snapshots || true
         $$RPK treasury.capacity.dlq || true
+        # Topic ACLs (research R11 / FR-034 / FR-036). Every command is tolerant
+        # so an already-existing ACL cannot fail the init container. The local
+        # `capacity` user is a superuser, so enforcement is nominal here; see
+        # docs/kafka-acls.md.
+        RPKACL="rpk acl create -X brokers=localhost:19092 -X user=capacity -X pass=capacity_local_dev -X sasl.mechanism=SCRAM-SHA-512"
+        $$RPKACL --allow-principal User:treasury --operation write --topic treasury.capacity.events || true
+        $$RPKACL --allow-principal User:treasury --operation write --topic treasury.capacity.snapshots || true
+        $$RPKACL --allow-principal User:capacity --operation read,describe --topic treasury.capacity.events || true
+        $$RPKACL --allow-principal User:capacity --operation read,describe --topic treasury.capacity.snapshots || true
+        $$RPKACL --allow-principal User:capacity --operation read,describe --group capacity-treasury-consumer || true
+        $$RPKACL --allow-principal User:capacity --operation write --topic treasury.capacity.dlq || true
+        $$RPKACL --allow-principal User:ops --operation read,describe --topic treasury.capacity.dlq || true
+        $$RPKACL --allow-principal User:ops --operation read,describe --group ops-replay || true
 
 volumes:
   pgdata:

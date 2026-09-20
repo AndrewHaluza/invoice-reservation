@@ -80,3 +80,34 @@ back `up` on the next heartbeat once the broker responds. The check therefore
 fails while the consumer cannot ingest, and it no longer stays `up` through an
 outage. A single stalled request can briefly flip the check, which is an honest
 reflection of a request that exceeded the KafkaJS timeout.
+
+## Availability can be over-reported between a release and the next snapshot
+
+A snapshot that acknowledges a reservation we have since released reinstates its
+amount until the following snapshot corrects it — potentially hours, and
+unbounded in magnitude. This is accepted rather than solved, because solving it
+means the snapshot must be reconciled against our release history rather than
+applied as asserted state. It is surfaced instead: the availability response
+carries `reconciliationPending`, derived at read time by
+`reconciliationPending()` in `availability.service.ts`, which is true when the
+most recently applied EXPLICIT `snapshot_acknowledgement` acknowledged a
+reservation that has since left `ACTIVE`. If the assumption behind the
+conservative direction is wrong, a client trusts a figure that over-states
+available capacity; note the error is toward under-reporting what is reserved,
+never the reverse. It is detected by `reconciliationPending` on the availability
+response, and the next snapshot corrects the figure.
+
+## Partitioning the ledger was dropped rather than deferred
+
+Monthly range partitioning is incompatible with the gapless per-program sequence
+the audit guarantee rests on. Postgres requires every unique constraint on a
+partitioned table to contain the partition key, so `UNIQUE (program_id,
+sequence)` cannot coexist with `PARTITION BY RANGE (occurred_at)` — the
+`CREATE TABLE` is rejected — and dropping a partition would permanently falsify
+`position = Σ ledger`. This decision is a deliberate drop, not a deferral:
+retrofitting partitioning later is a real migration with real risk, and at the
+stated scale that migration is years away, so a partitioning scheme that breaks
+the ledger's arithmetic is worse than none. If the assumption that scale stays
+within a plain table's comfort is false, query and retention performance degrade
+and partitioning must be retrofitted through a migration. It is detected by
+`invoice_reservation` growth and query latency measured against the stated scale.

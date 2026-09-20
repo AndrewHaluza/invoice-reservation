@@ -257,11 +257,15 @@ export class ApplySnapshotService {
 
           // FR-012: the applied-version marker advances even when the snapshot
           // corrected nothing. Progress and effect are separate facts.
+          // FR-019d: a fresh snapshot re-establishes the position, so it clears
+          // the recovery flag set by FR-019e. Stale/ignored/quarantined
+          // snapshots return before this write and never clear it.
           await manager.query(
             `UPDATE program
                 SET treasury_version = $2,
                     treasury_effective_at = $3,
-                    investigation_required = investigation_required OR $4
+                    investigation_required = investigation_required OR $4,
+                    position_verified = TRUE
               WHERE id = $1`,
             [
               snapshot.programId,

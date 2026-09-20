@@ -12,6 +12,10 @@ import { AvailabilityService } from './application/availability.service';
 import { CancelService } from './application/cancel.service';
 import { IdempotencyService } from './application/idempotency.service';
 import { ReleaseService } from './application/release.service';
+import { ReconciliationCheckJob } from './application/reconciliation-check.job';
+import { ReconciliationCheckService } from './application/reconciliation-check.service';
+import { RecoveryDetectionService } from './application/recovery-detection.service';
+import { RequestRetentionJob } from './application/request-retention.job';
 import { ReserveService } from './application/reserve.service';
 import { LedgerRepository } from './infrastructure/repositories/ledger.repository';
 import { ProgramRepository } from './infrastructure/repositories/program.repository';
@@ -33,6 +37,10 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
     AuditReadService,
     ApplyTreasuryEventService,
     ApplySnapshotService,
+    ReconciliationCheckService,
+    ReconciliationCheckJob,
+    RecoveryDetectionService,
+    RequestRetentionJob,
     { provide: FX_RATE_PROVIDER, useClass: CachedRateProvider },
     { provide: APP_FILTER, useClass: CapacityErrorFilter },
   ],
