@@ -7,6 +7,7 @@ import {
   CapacityEventHandler,
   InboundMessage,
 } from '../../src/treasury/handlers/capacity-event.handler';
+import { ReconciliationSnapshotHandler } from '../../src/treasury/handlers/reconciliation-snapshot.handler';
 import { DlqPublisher, DlqRecord } from '../../src/treasury/dlq/dlq.publisher';
 import { RetryPolicy } from '../../src/treasury/retry/failure-classifier';
 import {
@@ -129,6 +130,27 @@ function committer(): MessageCommitter & { committed: string[] } {
   };
 }
 
+// The consumer routes by topic; these tests exercise the event path, so the
+// snapshot handler is a stub that is never reached.
+const NOOP_SNAPSHOTS = {
+  handle: async () => ({ kind: 'applied' }),
+} as unknown as ReconciliationSnapshotHandler;
+
+function makeConsumer(
+  handler: CapacityEventHandler,
+  dlq: DlqPublisher,
+  retryPolicy: RetryPolicy,
+  cfg: ConfigService,
+): TreasuryConsumer {
+  return new TreasuryConsumer(
+    handler,
+    NOOP_SNAPSHOTS,
+    dlq,
+    retryPolicy,
+    cfg,
+  );
+}
+
 const flush = async (): Promise<void> => {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
@@ -155,7 +177,7 @@ describe('TreasuryConsumer (Kafka wiring)', () => {
   });
 
   it('does not start the broker connection under NODE_ENV=test', async () => {
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'applied' }),
       new RecordingDlq(),
       RETRY,
@@ -171,7 +193,7 @@ describe('TreasuryConsumer (Kafka wiring)', () => {
   });
 
   it('connects, subscribes, runs with autoCommit disabled, and commits offset+1', async () => {
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'applied' }),
       new RecordingDlq(),
       RETRY,
@@ -184,7 +206,10 @@ describe('TreasuryConsumer (Kafka wiring)', () => {
     const kafkaConsumer = kafkajsMock.__consumer;
     expect(kafkaConsumer.connect).toHaveBeenCalledTimes(1);
     expect(kafkaConsumer.subscribe).toHaveBeenCalledWith({
-      topic: 'treasury.capacity.events',
+      topics: [
+        'treasury.capacity.events',
+        'treasury.capacity.snapshots',
+      ],
       fromBeginning: false,
     });
     expect(kafkaConsumer.on).toHaveBeenCalledWith(
@@ -221,7 +246,7 @@ describe('TreasuryConsumer (Kafka wiring)', () => {
   });
 
   it('rebuilds the consumer after a non-retriable crash and republishes readiness up', async () => {
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'applied' }),
       new RecordingDlq(),
       RETRY,
@@ -249,7 +274,7 @@ describe('TreasuryConsumer (Kafka wiring)', () => {
   });
 
   it('leaves a retriable crash to KafkaJS and does not rebuild', async () => {
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'applied' }),
       new RecordingDlq(),
       RETRY,
@@ -280,7 +305,7 @@ describe('TreasuryConsumer (Kafka wiring)', () => {
   });
 
   it('drops readiness when a request stalls and restores it on the next heartbeat', async () => {
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'applied' }),
       new RecordingDlq(),
       RETRY,
@@ -314,9 +339,44 @@ describe('TreasuryConsumer.processMessage correlation ids', () => {
     resetConsumerStatus();
   });
 
+  it('routes a snapshot-topic message to the snapshot handler, not the event handler', async () => {
+    const eventHandler = { handle: jest.fn().mockResolvedValue({ kind: 'applied' }) };
+    const snapshotHandler = {
+      handle: jest.fn().mockResolvedValue({ kind: 'applied' }),
+    };
+    const consumer = new TreasuryConsumer(
+      eventHandler as unknown as CapacityEventHandler,
+      snapshotHandler as unknown as ReconciliationSnapshotHandler,
+      new RecordingDlq(),
+      RETRY,
+      config({
+        NODE_ENV: 'test',
+        KAFKA_CAPACITY_EVENTS_TOPIC: 'treasury.capacity.events',
+        KAFKA_SNAPSHOTS_TOPIC: 'treasury.capacity.snapshots',
+      }),
+    );
+    const c = committer();
+
+    await consumer.processMessage(
+      {
+        topic: 'treasury.capacity.snapshots',
+        partition: 0,
+        offset: '7',
+        key: null,
+        value: Buffer.from('{}'),
+        headers: {},
+      },
+      c,
+    );
+
+    expect(snapshotHandler.handle).toHaveBeenCalledTimes(1);
+    expect(eventHandler.handle).not.toHaveBeenCalled();
+    expect(c.committed).toEqual(['7']);
+  });
+
   it('passes a string correlation id through and quarantines the message', async () => {
     const dlq = new RecordingDlq();
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'quarantined', reason: 'SCHEMA_INVALID' }),
       dlq,
       RETRY,
@@ -342,7 +402,7 @@ describe('TreasuryConsumer.processMessage correlation ids', () => {
 
   it('decodes a buffer correlation id and treats a missing one as null', async () => {
     const dlq = new RecordingDlq();
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       fixedHandler({ kind: 'quarantined', reason: 'UNKNOWN_PROGRAM' }),
       dlq,
       RETRY,
@@ -371,7 +431,7 @@ describe('TreasuryConsumer.processMessage correlation ids', () => {
 
   it('rethrows a code-less transient failure without DLQ publish or offset commit (FR-035)', async () => {
     const dlq = new RecordingDlq();
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       // pg-pool's connect timeout is a plain Error with no `code`.
       throwingHandler(new Error('timeout exceeded when trying to connect')),
       dlq,
@@ -393,7 +453,7 @@ describe('TreasuryConsumer.processMessage correlation ids', () => {
 
   it('quarantines an unrecognised (non-transient) handler failure and commits its offset', async () => {
     const dlq = new RecordingDlq();
-    const consumer = new TreasuryConsumer(
+    const consumer = makeConsumer(
       throwingHandler(new Error('boom')),
       dlq,
       RETRY,

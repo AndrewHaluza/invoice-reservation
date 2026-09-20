@@ -39,6 +39,7 @@ topic, partition, offset, and correlation id.
 | `MISSING_ACK_MARKER` | A snapshot with no acknowledgement marker. The additive rule cannot be applied safely without one. |
 | `VERSION_CONFLICT` | Version equals the applied state but content differs. Applies to **both** snapshots and incremental events. Quarantined rather than arbitrated. |
 | `IMPLAUSIBLE_DELTA` | A snapshot implies a treasury correction above half the program's credit limit. Held for operator review rather than auto-applied. |
+| `SNAPSHOT_INCONSISTENT` | A snapshot's acknowledgement marker covers more than its own reported reserved total (`acked_local > reservedMinor`). It contradicts itself and would write a negative `TREASURY` component, so it is never applied. |
 | `LIMIT_BELOW_LOCAL` | *(informational, not a quarantine)* A limit reduction leaves the limit under this service's own reservations. The message **is** applied and the program is marked over-limit; the reason is recorded for operator visibility. |
 | `HANDLER_FAILURE` | Applying the message failed **permanently**. The transaction rolled back; nothing was applied. Transient failures (connection loss, pool exhaustion, lock timeout, serialization failure) are retried in place with backoff and never reach this topic. |
 
