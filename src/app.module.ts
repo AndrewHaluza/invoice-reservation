@@ -13,6 +13,7 @@ import {
   CorrelationMiddleware,
   resolveCorrelationId,
 } from './shared/correlation';
+import { TreasuryModule } from './treasury/treasury.module';
 
 type CorrelationRequest = IncomingMessage & { correlationId?: string };
 
@@ -61,6 +62,7 @@ type CorrelationRequest = IncomingMessage & { correlationId?: string };
     }),
     AuthModule,
     CapacityModule,
+    TreasuryModule,
     MetricsModule,
     HealthModule,
   ],

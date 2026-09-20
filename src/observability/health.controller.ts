@@ -11,6 +11,7 @@ import {
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
 import { Public } from '../shared/public';
+import { getConsumerStatus } from '../shared/health/consumer-health';
 
 /**
  * The minimal `Health` schema from `contracts/http-api.yaml`. It deliberately
@@ -22,15 +23,14 @@ export interface HealthResponse {
 }
 
 /**
- * Phase 4 registers the treasury Kafka consumer here. Until a consumer exists
- * there is no consumer that can be *disconnected*, so readiness must not fail on
- * its account. A lagging consumer never fails readiness at all (FR-007c, R10):
- * the service still serves reads and reservations correctly.
+ * Reports the treasury consumer's connectivity. The consumer publishes its own
+ * state (up/down) into process-global health state; the probe reads it here so
+ * the two modules stay independent.
  */
 @Injectable()
 export class ConsumerHealthIndicator {
   isHealthy(key: string): HealthIndicatorResult {
-    return { [key]: { status: 'up' } };
+    return { [key]: { status: getConsumerStatus() } };
   }
 }
 
@@ -70,10 +70,18 @@ export class HealthController {
     } catch {
       // Terminus throws a ServiceUnavailableException whose body echoes the raw
       // indicator details. Replace it with the minimal schema so no driver
-      // message, hostname, port or connection string can reach the client.
+      // message, hostname, port or connection string can reach the client. The
+      // individual states are re-derived so the body names what actually failed:
+      // a disconnected consumer must be visible, not reported up.
+      let database: 'up' | 'down' = 'up';
+      try {
+        await this.database.pingCheck('database', { timeout: 1000 });
+      } catch {
+        database = 'down';
+      }
       throw new ServiceUnavailableException({
         status: 'degraded',
-        checks: { database: 'down', consumer: 'up' },
+        checks: { consumer: getConsumerStatus(), database },
       });
     }
   }

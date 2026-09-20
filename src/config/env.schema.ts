@@ -14,7 +14,10 @@ export const envSchema = Joi.object({
   KAFKA_DLQ_TOPIC: Joi.string().default('treasury.capacity.dlq'),
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_CLOCK_SKEW_SECONDS: Joi.number().integer().min(0).default(60),
-  SNAPSHOT_DELTA_GUARD_RATIO: Joi.number().greater(0).max(1).default(0.5),
   RATE_LIMIT_READ_PER_MINUTE: Joi.number().integer().positive().default(600),
   RATE_LIMIT_WRITE_PER_MINUTE: Joi.number().integer().positive().default(120),
+  KAFKA_CONSUMER_GROUP_ID: Joi.string().default('capacity-treasury-consumer'),
+  KAFKA_RETRY_MAX_ATTEMPTS: Joi.number().integer().min(1).default(5),
+  KAFKA_RETRY_BASE_DELAY_MS: Joi.number().integer().min(0).default(200),
+  KAFKA_RETRY_MAX_DELAY_MS: Joi.number().integer().min(0).default(10000),
 });

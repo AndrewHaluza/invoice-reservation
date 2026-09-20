@@ -5,6 +5,7 @@ import { CachedRateProvider } from '../fx/cached-rate.provider';
 import { AuditController } from './api/audit.controller';
 import { CapacityController } from './api/capacity.controller';
 import { CapacityErrorFilter } from './api/error.filter';
+import { ApplyTreasuryEventService } from './application/apply-treasury-event.service';
 import { AuditReadService } from './application/audit-read.service';
 import { AvailabilityService } from './application/availability.service';
 import { CancelService } from './application/cancel.service';
@@ -13,6 +14,7 @@ import { ReleaseService } from './application/release.service';
 import { ReserveService } from './application/reserve.service';
 import { LedgerRepository } from './infrastructure/repositories/ledger.repository';
 import { ProgramRepository } from './infrastructure/repositories/program.repository';
+import { ProgramStreamPositionRepository } from './infrastructure/repositories/program-stream-position.repository';
 import { UnitOfWork } from './infrastructure/unit-of-work';
 
 @Module({
@@ -20,6 +22,7 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
   providers: [
     UnitOfWork,
     ProgramRepository,
+    ProgramStreamPositionRepository,
     LedgerRepository,
     IdempotencyService,
     ReserveService,
@@ -27,8 +30,10 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
     CancelService,
     AvailabilityService,
     AuditReadService,
+    ApplyTreasuryEventService,
     { provide: FX_RATE_PROVIDER, useClass: CachedRateProvider },
     { provide: APP_FILTER, useClass: CapacityErrorFilter },
   ],
+  exports: [ApplyTreasuryEventService, ProgramStreamPositionRepository],
 })
 export class CapacityModule {}

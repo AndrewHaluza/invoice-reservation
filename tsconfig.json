@@ -25,5 +25,12 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
+  "ts-node": {
+    // Load the full tsconfig `include` set (ambient .d.ts files such as
+    // src/types/kafkajs-snappy.d.ts) instead of only the entrypoint's import
+    // graph. Without this, `ts-node src/main.ts` fails on untyped deps that
+    // `tsc` and ts-jest resolve fine.
+    "files": true
+  }
 }
