@@ -3,7 +3,13 @@ import {
   ReservationSnapshot,
   releasePolicy,
 } from '../../src/capacity/domain/policies/release.policy';
-import { scaleRate } from '../../src/shared/money';
+import { money } from '../../src/shared/money/money';
+import {
+  RATE_SCALE,
+  convert,
+  roundHalfUp,
+  scaleRate,
+} from '../../src/shared/money/convert';
 
 function snapshot(
   overrides: Partial<ReservationSnapshot> = {},
@@ -71,7 +77,8 @@ describe('releasePolicy', () => {
     }
   });
 
-  it('refuses a release that exceeds the reserved remainder by one minor unit rather than clamping', () => {
+  it('refuses an inconsistent reservation whose reserved is below its converted invoice', () => {
+    // Exercises the `deltaMinor < 0n` branch at release.policy.ts:107-109.
     const decision = releasePolicy(
       release({
         releaseMinor: 101n,
@@ -85,6 +92,53 @@ describe('releasePolicy', () => {
     expect(decision.ok).toBe(false);
     if (!decision.ok) {
       expect(decision.error).toBe('RELEASE_EXCEEDS_RESERVED');
+    }
+  });
+
+  it('refuses a release larger than the outstanding invoice', () => {
+    // Exercises the invoice-currency bound at release.policy.ts:70-72.
+    const rate = scaleRate('1.0');
+    const decision = releasePolicy(
+      release({
+        releaseMinor: 1_001n,
+        reservation: snapshot({
+          outstandingInvoiceMinor: 1_000n,
+          outstandingReservedMinor: roundHalfUp(1_000n * rate, RATE_SCALE),
+        }),
+        scaledRate: rate,
+      }),
+    );
+
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) {
+      expect(decision.error).toBe('RELEASE_EXCEEDS_RESERVED');
+    }
+  });
+
+  it('keeps outstandingReserved equal to the converted outstanding invoice after a partial release', () => {
+    const rate = scaleRate('0.9216589862');
+    const decision = releasePolicy(
+      release({
+        releaseMinor: 400n,
+        reservation: snapshot({
+          programCurrency: 'EUR',
+          outstandingInvoiceMinor: 1_000n,
+          outstandingReservedMinor: roundHalfUp(1_000n * rate, RATE_SCALE),
+        }),
+        scaledRate: rate,
+      }),
+    );
+
+    expect(decision.ok).toBe(true);
+    if (decision.ok) {
+      expect(decision.value.outstandingInvoiceMinor).toBe(600n);
+      const remainder = convert(money(600n, 'EUR'), 'EUR', rate);
+      expect(remainder.kind).toBe('converted');
+      if (remainder.kind === 'converted') {
+        expect(decision.value.outstandingReservedMinor).toBe(
+          remainder.amount.minor,
+        );
+      }
     }
   });
 

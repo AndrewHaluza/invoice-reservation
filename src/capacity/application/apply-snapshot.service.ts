@@ -381,8 +381,14 @@ export class ApplySnapshotService {
     const ratio =
       this.config.get<number>('SNAPSHOT_DELTA_GUARD_RATIO') ??
       DEFAULT_DELTA_GUARD_RATIO;
-    const threshold = BigInt(Math.floor(ratio * Number(creditLimitMinor)));
+    // `ratio` is a configured float in (0, 1]. Converting it once to an integer
+    // basis-point count keeps the comparison exact for every int64 limit; going
+    // through `Number(creditLimitMinor)` loses precision above 2^53. A ratio
+    // such as 0.33333 rounds to 3333 basis points, a deliberate quantisation to
+    // four decimal places of an operator-chosen heuristic.
+    const basisPoints = BigInt(Math.round(ratio * 10_000));
     const magnitude = deltaTreasury < 0n ? -deltaTreasury : deltaTreasury;
-    return magnitude > threshold;
+    const exceedsGuard = magnitude * 10_000n > basisPoints * creditLimitMinor;
+    return exceedsGuard;
   }
 }

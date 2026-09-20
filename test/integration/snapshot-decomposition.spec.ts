@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
+import { AvailabilityService } from '../../src/capacity/application/availability.service';
+import { ProgramRepository } from '../../src/capacity/infrastructure/repositories/program.repository';
 import { dataSourceOptions } from '../../src/config/data-source';
 import { PostgresFixture, startPostgres } from '../support/postgres-container';
 import {
@@ -318,5 +320,62 @@ describe('Snapshot decomposition (T081)', () => {
       [programId],
     );
     expect(onset[0]?.count).toBe(1);
+  });
+
+  it('reports reconciliationPending when a WATERMARK acknowledgement is newer than a pending EXPLICIT one', async () => {
+    const programId = await insertProgram(ds, organisationId, {
+      currency: 'USD',
+      creditLimitMinor: LIMIT,
+      localReservedMinor: 500_000,
+    });
+    await insertLocalReservation(ds, programId, {
+      invoiceId: 'inv-dec-recon-pending',
+      amountMinor: 500_000,
+      treasuryReference: 'TRSY-DEC-RP',
+      confirmedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    await expect(
+      harness.snapshotHandler.handle(
+        snapshotMessage({
+          programId,
+          messageId: 'snap-t081-recon-explicit',
+          version: 30,
+          reservedMinor: '500000',
+          creditLimitMinor: String(LIMIT),
+          acknowledgement: {
+            kind: 'EXPLICIT',
+            reservationIds: ['TRSY-DEC-RP'],
+          },
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'applied' });
+
+    await ds.query(
+      `UPDATE invoice_reservation
+          SET status = 'FULLY_RELEASED', updated_at = now()
+        WHERE program_id = $1 AND invoice_id = $2`,
+      [programId, 'inv-dec-recon-pending'],
+    );
+
+    await expect(
+      harness.snapshotHandler.handle(
+        snapshotMessage({
+          programId,
+          messageId: 'snap-t081-recon-watermark',
+          version: 31,
+          reservedMinor: '500000',
+          creditLimitMinor: String(LIMIT),
+          acknowledgement: {
+            kind: 'WATERMARK',
+            ingestedThrough: '2026-06-01T00:00:00.000Z',
+          },
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'applied' });
+
+    const availability = new AvailabilityService(ds, new ProgramRepository());
+    const body = await availability.forProgram(programId);
+    expect(body.reconciliationPending).toBe(true);
   });
 });

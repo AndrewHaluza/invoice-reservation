@@ -33,6 +33,21 @@ export class RequestRetentionJob implements OnModuleInit, OnModuleDestroy {
       [cutoff],
     );
 
+    const stuckRows = await this.dataSource.query<{ stuck: number }[]>(
+      `SELECT count(*)::int AS stuck
+         FROM request_record
+        WHERE state = 'PENDING'
+          AND recorded_at < $1`,
+      [cutoff],
+    );
+    const stuck = stuckRows[0]?.stuck ?? 0;
+
+    if (stuck > 0) {
+      this.logger.warn(
+        `${stuck} request_record row(s) have been PENDING since before the retention cutoff; a writer crashed mid-request and the key cannot be replayed or reused`,
+      );
+    }
+
     return affected;
   }
 

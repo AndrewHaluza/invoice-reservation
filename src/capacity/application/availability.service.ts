@@ -36,6 +36,7 @@ export class AvailabilityService {
   // Phase 8 writes the acknowledgement rows this reads; until then the
   // predicate is simply false.
   private async reconciliationPending(programId: string): Promise<boolean> {
+    // Scoped to EXPLICIT: a later WATERMARK is not evidence that an explicit acknowledgement was corrected.
     const rows = await this.dataSource.query<PendingRow[]>(
       `SELECT EXISTS (
          SELECT 1
@@ -49,7 +50,7 @@ export class AvailabilityService {
             AND sa.version = (
               SELECT MAX(version)
                 FROM snapshot_acknowledgement
-               WHERE program_id = $1
+               WHERE program_id = $1 AND kind = 'EXPLICIT'
             )
        ) AS pending`,
       [programId],

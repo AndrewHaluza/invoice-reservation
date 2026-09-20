@@ -249,7 +249,7 @@ paths:
           in: query
           schema: { $ref: '#/components/schemas/LedgerCause' }
         - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/LedgerLimit'
       responses:
         '200':
           description: A page of ledger entries, possibly empty
@@ -335,6 +335,19 @@ components:
       name: limit
       in: query
       schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    LedgerLimit:
+      name: limit
+      in: query
+      required: false
+      description: >
+        Maximum ledger entries per page. The ledger is a bulk audit read, so it admits a larger page
+        than the reservation list: entries are small, immutable and sequence-ordered, and an auditor
+        reconstructing a position reads the whole history.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
 
   schemas:
     Money:

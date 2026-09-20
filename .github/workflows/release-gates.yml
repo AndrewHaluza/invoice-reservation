@@ -1,0 +1,32 @@
+name: release-gates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Static acceptance verifier
+        run: bash scripts/verify-uat.sh
+
+      - name: Ledger recovery
+        run: npm run test:recovery
+
+      - name: Performance gates
+        run: npm run test:perf
+
+# `reconcile` and `audit:ledger` are deliberately not run here: both require a
+# seeded live database rather than testcontainers, and running them against an
+# empty schema would report a false pass.

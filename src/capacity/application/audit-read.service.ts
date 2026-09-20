@@ -61,6 +61,7 @@ interface InvoiceReservationRow {
   fx_rate_source: string | null;
   status: ReservationStatus;
   created_at: Date;
+  created_at_cursor: string;
 }
 
 interface LedgerEntryRow {
@@ -175,7 +176,8 @@ export class AuditReadService {
 
     parameters.push(limit + 1);
     const rows = await this.dataSource.query<InvoiceReservationRow[]>(
-      `SELECT *
+      `SELECT *,
+              to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
          FROM invoice_reservation
         WHERE ${conditions.join(' AND ')}
         ORDER BY created_at DESC, id DESC
@@ -191,7 +193,7 @@ export class AuditReadService {
       nextCursor:
         hasMore && last !== undefined
           ? encodeCursor({
-              createdAt: last.created_at.toISOString(),
+              createdAt: last.created_at_cursor,
               id: last.id,
             })
           : null,

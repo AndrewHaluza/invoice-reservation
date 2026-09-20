@@ -69,7 +69,7 @@ export class CapacityController {
       throw new BadRequestException({
         code: 'VALIDATION_FAILED',
         message: 'Idempotency-Key is required.',
-        details: { 'Idempotency-Key': 'required, 8 to 128 characters' },
+        details: { idempotencyKey: 'required, 8 to 128 characters' },
       });
     }
 
@@ -107,7 +107,7 @@ export class CapacityController {
       throw new BadRequestException({
         code: 'VALIDATION_FAILED',
         message: 'Idempotency-Key is required.',
-        details: { 'Idempotency-Key': 'required, 8 to 128 characters' },
+        details: { idempotencyKey: 'required, 8 to 128 characters' },
       });
     }
 
@@ -145,7 +145,7 @@ export class CapacityController {
       throw new BadRequestException({
         code: 'VALIDATION_FAILED',
         message: 'Idempotency-Key is required.',
-        details: { 'Idempotency-Key': 'required, 8 to 128 characters' },
+        details: { idempotencyKey: 'required, 8 to 128 characters' },
       });
     }
 
