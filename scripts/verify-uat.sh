@@ -248,6 +248,14 @@ grep -q "RECONCILIATION_INTERVAL_SECONDS" .env.example \
   || fail ".env.example does not declare RECONCILIATION_INTERVAL_SECONDS"
 [ -f docs/ASSUMPTIONS.md ] || fail "missing phase 9 artifact: docs/ASSUMPTIONS.md"
 [ -f docs/kafka-acls.md ] || fail "missing phase 9 artifact: docs/kafka-acls.md"
+[ -f src/capacity/application/request-retention.job.ts ] \
+  || fail "missing phase 9 artifact: request-retention.job.ts"
+grep -q "EXPIRED" src/capacity/application/request-retention.job.ts \
+  || fail "request-retention.job.ts does not transition requests to EXPIRED"
+grep -q "REQUEST_RETENTION_DAYS" src/config/env.schema.ts \
+  || fail "env.schema.ts does not declare REQUEST_RETENTION_DAYS"
+grep -q "REQUEST_RETENTION_DAYS" .env.example \
+  || fail ".env.example does not declare REQUEST_RETENTION_DAYS"
 ok "phase 9 artifacts already landed (reconcile/recovery/perf/job/docs)"
 
 # --- Not asserted here (needs Docker or a live stack) ------------------------

@@ -274,6 +274,22 @@ describe('reservation contract', () => {
     expectNoInternalKeys(conflict.body);
   });
 
+  it('the missing Idempotency-Key 400 validates against the Error schema', async () => {
+    const organisationId = await createOrganisation('contract-missing-key');
+    const programId = await createProgram(organisationId, 1_000_000_000n);
+    const token = tokenFor(organisationId, WRITE_SCOPE);
+
+    const response = await post(programId, token, undefined, {
+      invoiceId: 'contract-inv-missing-key',
+      amount: { amountMinor: '100000', currency: 'USD' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(Object.keys(response.body.details)).toEqual(['idempotencyKey']);
+    expectValidAgainst(ERROR_REF, response.body);
+    expectNoInternalKeys(response.body);
+  });
+
   it('429 is reachable with RATE_LIMITED and a Retry-After header', async () => {
     const organisationId = await createOrganisation('contract-429');
     const programId = await createProgram(organisationId, 1_000_000_000_000n);

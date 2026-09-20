@@ -212,4 +212,27 @@ describe('Request-record retention sweep (FR-006b/FR-006c)', () => {
       ),
     ).resolves.toEqual({ kind: 'refused', code: 'IDEMPOTENCY_CONFLICT' });
   });
+
+  it('leaves an over-age PENDING row untouched and warns', async () => {
+    const logger = (
+      job as unknown as { logger: { warn: (message: string) => void } }
+    ).logger;
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    try {
+      const stuckAffected = await job.sweep();
+
+      expect(stuckAffected).toBe(0);
+      expect(warn).toHaveBeenCalledWith(
+        '1 request_record row(s) have been PENDING since before the retention cutoff; a writer crashed mid-request and the key cannot be replayed or reused',
+      );
+
+      const agedPending = await read(AGED_PENDING_ID);
+      expect(agedPending.state).toBe('PENDING');
+      expect(agedPending.outcome).toBeNull();
+      expect(agedPending.content_fingerprint).toBe(pendingFingerprint);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

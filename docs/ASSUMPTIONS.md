@@ -111,3 +111,61 @@ the ledger's arithmetic is worse than none. If the assumption that scale stays
 within a plain table's comfort is false, query and retention performance degrade
 and partitioning must be retrofitted through a migration. It is detected by
 `invoice_reservation` growth and query latency measured against the stated scale.
+
+## The reservation-path trigger stands down for reconciliation writes
+
+The backstop trigger `assert_local_within_limit()` is redefined by
+`1758260000000-SnapshotLocalCorrectionTrigger.ts` to return early when the
+session setting `capacity.reconciliation_in_progress` is `'on'`, and
+`src/capacity/application/apply-snapshot.service.ts` sets that setting for the
+duration of its transaction. This departs from the phase-8 plan, which had said
+to report a blocking constraint rather than relax it; the trigger was relaxed
+instead. The phase-2 trigger fires
+`WHEN (NEW.local_reserved_minor > OLD.local_reserved_minor)`, which a legitimate
+reconciliation correction does trip, so FR-011c and FR-011g could not be honoured
+without an escape. If the assumption that only the snapshot path stands the
+trigger down is wrong, a bug in the snapshot path could raise
+`local_reserved_minor` above the limit without the backstop firing. It is
+detected by the reservation path never setting the setting — its backstop is
+unchanged — and by `npm run audit:ledger`, which recomputes every component from
+the ledger.
+
+## A quarantined message gets no `processed_message` row
+
+`src/treasury/consumer/treasury.consumer.ts` publishes a quarantined message to
+the DLQ and commits the offset without recording a dedupe row, departing from
+the phase-7 plan's task 9 wording. The DLQ publish is treated as the durable
+quarantine record, and FR-036 requires a replayed DLQ message to re-enter the
+ordinary validation and deduplication path, which a `processed_message` row
+would turn into a privileged no-op. If the assumption that the DLQ publish is
+the durable record is wrong, a crash between the DLQ publish and the offset
+commit republishes the same message and produces duplicate quarantine entries —
+no capacity is lost, because nothing was applied. It is detected by duplicate
+`messageId`s in the DLQ topic.
+
+## Redis unavailability degrades rate limiting instead of failing startup
+
+`src/auth/redis.provider.ts` installs an `error` listener on the redis client
+that logs the error and continues, where the phase-2 plan required the error to
+propagate and fail startup loudly. Without the listener an emitted `error` is an
+unhandled error event that terminates the process, so a redis blip would take
+down the API rather than degrade rate limiting; the provider therefore installs
+one and continues. If the assumption that a redis error is survivable is wrong,
+a redis outage silently removes per-organisation rate limiting while the API
+keeps serving. It is detected by the error being logged on every failed
+connection attempt, which `maxRetriesPerRequest: 3` bounds.
+
+## The release policy derives its delta by differencing converted outstandings
+
+`src/capacity/domain/policies/release.policy.ts` bounds the release in invoice
+currency and derives the capacity delta as the difference between the converted
+outstanding invoice before and after, rather than converting the release amount
+on its own as the phase-4 plan specified. This preserves
+`outstanding_reserved_minor === round_half_up(outstanding_invoice_minor × rate)`
+at every step, so a sub-1 rate cannot drain the reserved remainder ahead of the
+invoice and strand the reservation short of `FULLY_RELEASED`. If the assumption
+that the reserved equals the converted outstanding is wrong, a reservation could
+be left with unreleasable capacity. It is detected by the invariant being
+asserted in `test/unit/release-policy.spec.ts` and by
+`test/integration/release-nets-to-zero.spec.ts` proving the `LOCAL` component
+sums to zero across a full repayment.

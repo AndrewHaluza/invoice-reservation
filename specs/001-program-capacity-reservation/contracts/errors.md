@@ -26,6 +26,29 @@ are additive-only.
 | `NOT_FOUND` | 404 | The program or reservation does not exist **or** is outside the caller's organisation. Deliberately indistinguishable. |
 | `POSITION_UNVERIFIED` | 503 | The ledger was restored but this program's treasury stream position is unknown or behind. Writes are refused rather than serving a position the service cannot vouch for. Detected via `program.position_verified = FALSE`; the hold is per-program. Ownership resolution still runs first, so an out-of-scope program answers 404, not 503. |
 
+## HTTP — framework-originated
+
+These codes are not domain refusals. They are emitted when the HTTP layer itself rejects a
+request before any domain code runs — an unroutable method, an unreadable body, an oversized
+payload — and the raised `HttpException` therefore carries no domain `code`. The filter derives
+the code from the status so that every response still carries one. They are additive-only on the
+same terms as the table above.
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `VALIDATION_FAILED` | 400 | The request body failed schema validation before any domain code ran. `details` names the offending fields. |
+| `UNAUTHORIZED` | 401 | The request arrived with no usable credentials — missing, malformed, or expired. |
+| `FORBIDDEN` | 403 | The request was understood but the HTTP layer would not permit it. |
+| `NOT_FOUND` | 404 | The route itself does not exist, so no resource was addressed. |
+| `METHOD_NOT_ALLOWED` | 405 | The route exists but does not accept this HTTP method. |
+| `NOT_ACCEPTABLE` | 406 | The request asked for a representation this endpoint cannot produce. |
+| `CONFLICT` | 409 | The HTTP layer rejected the request as conflicting with current state. |
+| `PAYLOAD_TOO_LARGE` | 413 | The request body exceeded the largest payload the server will read. |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | The request body's media type is not one this endpoint can read. |
+| `UNPROCESSABLE_ENTITY` | 422 | The request was well-formed but the HTTP layer could not process it. |
+| `RATE_LIMITED` | 429 | The caller exceeded the HTTP layer's request budget. |
+| `SERVICE_UNAVAILABLE` | 503 | The HTTP layer is not ready to serve the request. |
+
 ## Kafka — quarantine reasons
 
 Attached as a header on the message republished to `treasury.capacity.dlq`, alongside the original
