@@ -20,9 +20,11 @@ import {
   AvailabilityBody,
 } from '../application/availability.projection';
 import { AvailabilityService } from '../application/availability.service';
+import { CancelBody, CancelService } from '../application/cancel.service';
 import { ReleaseBody, ReleaseService } from '../application/release.service';
 import { ReserveBody, ReserveService } from '../application/reserve.service';
 import { ReservationBody } from '../application/reservation.projection';
+import { CancellationDto } from './dto/cancellation.dto';
 import { CreateReleaseDto } from './dto/create-release.dto';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ListReservationsQueryDto } from './dto/list-reservations.query';
@@ -44,6 +46,7 @@ export class CapacityController {
   constructor(
     private readonly reserveService: ReserveService,
     private readonly releaseService: ReleaseService,
+    private readonly cancelService: CancelService,
     private readonly availabilityService: AvailabilityService,
     private readonly auditReadService: AuditReadService,
   ) {}
@@ -113,6 +116,43 @@ export class CapacityController {
       invoiceId,
       releaseMinor: BigInt(dto.amount.amountMinor),
       currency: dto.amount.currency,
+      actor: request.auth.org,
+      correlationId: currentCorrelationId() ?? 'unknown',
+    });
+
+    response.status(outcome.created ? 201 : 200);
+    return outcome.body;
+  }
+
+  @Post('reservations/:invoiceId/cancellation')
+  @RequiredScope('capacity:write')
+  async cancelReservation(
+    @Param('programId', new ParseUUIDPipe({ version: '4' })) programId: string,
+    @Param('invoiceId') invoiceId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: CancellationDto,
+    @Req() request: ReservationRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<CancelBody> {
+    if (
+      idempotencyKey === undefined ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 128
+    ) {
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'Idempotency-Key is required.',
+        details: { 'Idempotency-Key': 'required, 8 to 128 characters' },
+      });
+    }
+
+    const outcome = await this.cancelService.cancel({
+      organisationId: request.auth.org,
+      programId,
+      requestId: idempotencyKey,
+      invoiceId,
+      reason: dto.reason,
+      note: dto.note ?? null,
       actor: request.auth.org,
       correlationId: currentCorrelationId() ?? 'unknown',
     });

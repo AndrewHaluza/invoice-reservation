@@ -34,6 +34,18 @@ export function reserveFingerprint(input: {
     .digest('hex');
 }
 
+/** SHA-256 over the fields of a cancellation request (FR-006a). */
+export function cancelFingerprint(input: {
+  programId: string;
+  invoiceId: string;
+  reason: string;
+  note: string;
+}): string {
+  return createHash('sha256')
+    .update(`${input.programId}|${input.invoiceId}|${input.reason}|${input.note}`)
+    .digest('hex');
+}
+
 interface RequestRecordRow {
   operation: 'RESERVE' | 'RELEASE' | 'CANCEL';
   state: 'PENDING' | 'COMPLETE' | 'EXPIRED';
