@@ -6,6 +6,7 @@ import { AuditController } from './api/audit.controller';
 import { CapacityController } from './api/capacity.controller';
 import { CapacityErrorFilter } from './api/error.filter';
 import { ApplyTreasuryEventService } from './application/apply-treasury-event.service';
+import { ApplySnapshotService } from './application/apply-snapshot.service';
 import { AuditReadService } from './application/audit-read.service';
 import { AvailabilityService } from './application/availability.service';
 import { CancelService } from './application/cancel.service';
@@ -31,9 +32,10 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
     AvailabilityService,
     AuditReadService,
     ApplyTreasuryEventService,
+    ApplySnapshotService,
     { provide: FX_RATE_PROVIDER, useClass: CachedRateProvider },
     { provide: APP_FILTER, useClass: CapacityErrorFilter },
   ],
-  exports: [ApplyTreasuryEventService, ProgramStreamPositionRepository],
+  exports: [ApplyTreasuryEventService, ApplySnapshotService, ProgramStreamPositionRepository],
 })
 export class CapacityModule {}

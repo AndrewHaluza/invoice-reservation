@@ -20,8 +20,10 @@ import { PostgresFixture, startPostgres } from '../support/postgres-container';
 import {
   buildTreasuryHarness,
   capacityEventMessage,
+  insertLocalReservation,
   insertOrganisation,
   insertProgram,
+  snapshotMessage,
   TreasuryHarness,
 } from '../support/treasury';
 
@@ -56,11 +58,24 @@ const PERMANENT_RETRY: RetryPolicy = {
   maxDelayMs: 1,
 };
 
+const TEST_CONFIG = {
+  get: (_key: string, fallback?: unknown) => fallback,
+} as unknown as ConfigService;
+
 describe('Treasury consumer DLQ (T071)', () => {
   let fixture: PostgresFixture;
   let ds: DataSource;
   let harness: TreasuryHarness;
   let programId: string;
+
+  // The consumer routes by topic; snapshots go to the snapshot handler.
+  const newConsumer = (
+    handler: CapacityEventHandler,
+    dlq: DlqPublisher,
+    retry: RetryPolicy,
+    config: ConfigService,
+  ): TreasuryConsumer =>
+    new TreasuryConsumer(handler, harness.snapshotHandler, dlq, retry, config);
 
   beforeAll(async () => {
     fixture = await startPostgres();
@@ -93,11 +108,11 @@ describe('Treasury consumer DLQ (T071)', () => {
   it('quarantines an unparseable event as SCHEMA_INVALID', async () => {
     const dlq = new RecordingDlqPublisher();
     const c = committer();
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       harness.handler,
       dlq,
       FAST_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
     const message: InboundMessage = {
       ...capacityEventMessage({ programId, messageId: 'msg-schema-0001' }),
@@ -114,11 +129,11 @@ describe('Treasury consumer DLQ (T071)', () => {
   it('quarantines an event for an unknown program as UNKNOWN_PROGRAM', async () => {
     const dlq = new RecordingDlqPublisher();
     const c = committer();
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       harness.handler,
       dlq,
       FAST_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
     const message = capacityEventMessage({
       programId: randomUUID(),
@@ -135,11 +150,11 @@ describe('Treasury consumer DLQ (T071)', () => {
   it('quarantines a currency mismatch as CURRENCY_MISMATCH', async () => {
     const dlq = new RecordingDlqPublisher();
     const c = committer();
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       harness.handler,
       dlq,
       FAST_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
     const message = capacityEventMessage({
       programId,
@@ -167,11 +182,11 @@ describe('Treasury consumer DLQ (T071)', () => {
 
     const dlq = new RecordingDlqPublisher();
     const c = committer();
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       harness.handler,
       dlq,
       FAST_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
     const second = capacityEventMessage({
       programId,
@@ -195,11 +210,11 @@ describe('Treasury consumer DLQ (T071)', () => {
         throw new PermanentTreasuryError('boom');
       },
     };
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       handler as unknown as CapacityEventHandler,
       dlq,
       PERMANENT_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
 
     await consumer.processMessage(
@@ -230,11 +245,11 @@ describe('Treasury consumer DLQ (T071)', () => {
       },
     };
     const dlq = new RecordingDlqPublisher();
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       handler as unknown as CapacityEventHandler,
       dlq,
       FAST_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
 
     await consumer.processMessage(
@@ -257,11 +272,11 @@ describe('Treasury consumer DLQ (T071)', () => {
     };
     const dlq = new RecordingDlqPublisher();
     const c = committer();
-    const consumer = new TreasuryConsumer(
+    const consumer = newConsumer(
       handler as unknown as CapacityEventHandler,
       dlq,
       FAST_RETRY,
-      {} as ConfigService,
+      TEST_CONFIG,
     );
 
     await expect(
@@ -313,6 +328,86 @@ describe('Treasury consumer DLQ (T071)', () => {
     ).resolves.toEqual({ kind: 'quarantined', reason: 'VERSION_CONFLICT' });
   });
 
-  it.todo('MISSING_ACK_MARKER — snapshot-only, deferred to phase 8');
-  it.todo('IMPLAUSIBLE_DELTA — snapshot-only, deferred to phase 8');
+  it('quarantines a snapshot with no acknowledgement marker as MISSING_ACK_MARKER', async () => {
+    const dlq = new RecordingDlqPublisher();
+    const c = committer();
+    const consumer = newConsumer(
+      harness.handler,
+      dlq,
+      FAST_RETRY,
+      TEST_CONFIG,
+    );
+    const message = snapshotMessage({
+      programId,
+      messageId: 'msg-snap-noack-0001',
+      version: 50,
+      reservedMinor: '0',
+      creditLimitMinor: '1000000',
+      acknowledgement: null,
+    });
+
+    await consumer.processMessage(message, c);
+
+    expect(dlq.records).toHaveLength(1);
+    expect(dlq.records[0]?.reason).toBe('MISSING_ACK_MARKER');
+    expect(c.committed).toHaveLength(1);
+  });
+
+  it('quarantines an implausible treasury correction as IMPLAUSIBLE_DELTA', async () => {
+    const dlq = new RecordingDlqPublisher();
+    const c = committer();
+    const consumer = newConsumer(
+      harness.handler,
+      dlq,
+      FAST_RETRY,
+      TEST_CONFIG,
+    );
+    const message = snapshotMessage({
+      programId,
+      messageId: 'msg-snap-implausible-0001',
+      version: 51,
+      reservedMinor: '10000000',
+      creditLimitMinor: '1000000',
+    });
+
+    await consumer.processMessage(message, c);
+
+    expect(dlq.records).toHaveLength(1);
+    expect(dlq.records[0]?.reason).toBe('IMPLAUSIBLE_DELTA');
+    expect(c.committed).toHaveLength(1);
+  });
+
+  it('quarantines a self-contradicting snapshot as SNAPSHOT_INCONSISTENT', async () => {
+    await insertLocalReservation(ds, programId, {
+      invoiceId: 'inv-dlq-inconsistent',
+      amountMinor: 500_000,
+      treasuryReference: 'TRSY-DLQ-I',
+    });
+
+    const dlq = new RecordingDlqPublisher();
+    const c = committer();
+    const consumer = newConsumer(
+      harness.handler,
+      dlq,
+      FAST_RETRY,
+      TEST_CONFIG,
+    );
+    const message = snapshotMessage({
+      programId,
+      messageId: 'msg-snap-inconsistent-0001',
+      version: 52,
+      reservedMinor: '100000',
+      creditLimitMinor: '1000000',
+      acknowledgement: {
+        kind: 'EXPLICIT',
+        reservationIds: ['TRSY-DLQ-I'],
+      },
+    });
+
+    await consumer.processMessage(message, c);
+
+    expect(dlq.records).toHaveLength(1);
+    expect(dlq.records[0]?.reason).toBe('SNAPSHOT_INCONSISTENT');
+    expect(c.committed).toHaveLength(1);
+  });
 });

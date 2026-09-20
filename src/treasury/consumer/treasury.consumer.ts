@@ -26,6 +26,10 @@ import {
   InboundMessage,
 } from '../handlers/capacity-event.handler';
 import {
+  ReconciliationSnapshotHandler,
+  SnapshotHandleOutcome,
+} from '../handlers/reconciliation-snapshot.handler';
+import {
   RetryExhaustedError,
   RetryPolicy,
   isTransientFailure,
@@ -88,6 +92,7 @@ export class TreasuryConsumer implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly handler: CapacityEventHandler,
+    private readonly snapshotHandler: ReconciliationSnapshotHandler,
     @Inject(DLQ_PUBLISHER) private readonly dlq: DlqPublisher,
     @Inject(TREASURY_RETRY_POLICY) private readonly retryPolicy: RetryPolicy,
     private readonly config: ConfigService,
@@ -111,10 +116,10 @@ export class TreasuryConsumer implements OnModuleInit, OnModuleDestroy {
     message: InboundMessage,
     commit: MessageCommitter,
   ): Promise<void> {
-    let outcome: HandleOutcome;
+    let outcome: HandleOutcome | SnapshotHandleOutcome;
     try {
       outcome = await withRetry(
-        () => this.handler.handle(message),
+        () => this.dispatch(message),
         this.retryPolicy,
         (error, attempt, delayMs) => {
           this.logger.warn(
@@ -215,7 +220,7 @@ export class TreasuryConsumer implements OnModuleInit, OnModuleDestroy {
     try {
       await consumer.connect();
       await consumer.subscribe({
-        topic: this.eventsTopic(),
+        topics: [this.eventsTopic(), this.snapshotsTopic()],
         fromBeginning: false,
       });
       setConsumerStatus('up');
@@ -301,10 +306,30 @@ export class TreasuryConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // A single consumer group subscribes to both the incremental event stream and
+  // the snapshot stream (phase 7's consumer is reused, not duplicated). The
+  // topic decides which handler parses the message: a snapshot fed to the event
+  // handler would be rejected `SCHEMA_INVALID`, and vice versa.
+  private dispatch(
+    message: InboundMessage,
+  ): Promise<HandleOutcome | SnapshotHandleOutcome> {
+    if (message.topic === this.snapshotsTopic()) {
+      return this.snapshotHandler.handle(message);
+    }
+    return this.handler.handle(message);
+  }
+
   private eventsTopic(): string {
     return (
       this.config.get<string>('KAFKA_CAPACITY_EVENTS_TOPIC') ??
       'treasury.capacity.events'
+    );
+  }
+
+  private snapshotsTopic(): string {
+    return (
+      this.config.get<string>('KAFKA_SNAPSHOTS_TOPIC') ??
+      'treasury.capacity.snapshots'
     );
   }
 

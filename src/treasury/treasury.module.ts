@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { CapacityModule } from '../capacity/capacity.module';
 import { DLQ_PUBLISHER, KafkaDlqPublisher } from './dlq/dlq.publisher';
 import { CapacityEventHandler } from './handlers/capacity-event.handler';
+import { ReconciliationSnapshotHandler } from './handlers/reconciliation-snapshot.handler';
 import { RetryPolicy } from './retry/failure-classifier';
 import {
   TREASURY_RETRY_POLICY,
@@ -13,6 +14,7 @@ import {
   imports: [CapacityModule],
   providers: [
     CapacityEventHandler,
+    ReconciliationSnapshotHandler,
     KafkaDlqPublisher,
     { provide: DLQ_PUBLISHER, useExisting: KafkaDlqPublisher },
     {
