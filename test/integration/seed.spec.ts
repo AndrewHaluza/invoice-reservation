@@ -110,6 +110,10 @@ describe('seed script', () => {
 
     gitBefore = gitStatus();
 
+    // data-source.ts prefers MIGRATION_DATABASE_URL over DATABASE_URL, so both
+    // must point at the fixture: an ambient ticket value would otherwise send
+    // the seed to the worktree's own database instead of this container.
+    process.env.MIGRATION_DATABASE_URL = fixture.ownerUrl;
     process.env.DATABASE_URL = fixture.appUrl;
     process.env.JWT_SECRET = JWT_SECRET;
 

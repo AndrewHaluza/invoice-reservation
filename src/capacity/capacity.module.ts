@@ -7,6 +7,7 @@ import { CapacityController } from './api/capacity.controller';
 import { CapacityErrorFilter } from './api/error.filter';
 import { AuditReadService } from './application/audit-read.service';
 import { AvailabilityService } from './application/availability.service';
+import { CancelService } from './application/cancel.service';
 import { IdempotencyService } from './application/idempotency.service';
 import { ReleaseService } from './application/release.service';
 import { ReserveService } from './application/reserve.service';
@@ -23,6 +24,7 @@ import { UnitOfWork } from './infrastructure/unit-of-work';
     IdempotencyService,
     ReserveService,
     ReleaseService,
+    CancelService,
     AvailabilityService,
     AuditReadService,
     { provide: FX_RATE_PROVIDER, useClass: CachedRateProvider },
