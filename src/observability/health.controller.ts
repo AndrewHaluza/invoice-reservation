@@ -2,7 +2,7 @@ import {
   Controller,
   Get,
   Injectable,
-  ServiceUnavailableException,
+  Res,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
@@ -10,6 +10,7 @@ import {
   type HealthIndicatorResult,
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
+import type { Response } from 'express';
 import { Public } from '../shared/public';
 import { getConsumerStatus } from '../shared/health/consumer-health';
 
@@ -60,7 +61,9 @@ export class HealthController {
 
   @Get('ready')
   @Public()
-  async ready(): Promise<HealthResponse> {
+  async ready(
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<HealthResponse> {
     try {
       const result = await this.health.check([
         () => this.consumer.isHealthy('consumer'),
@@ -69,20 +72,23 @@ export class HealthController {
       return { status: 'ok', checks: toChecks(result.details) };
     } catch {
       // Terminus throws a ServiceUnavailableException whose body echoes the raw
-      // indicator details. Replace it with the minimal schema so no driver
-      // message, hostname, port or connection string can reach the client. The
-      // individual states are re-derived so the body names what actually failed:
-      // a disconnected consumer must be visible, not reported up.
+      // indicator details. Re-derive the individual states so the body names
+      // what actually failed: a disconnected consumer must be visible, not
+      // reported up. The status is set on the response directly rather than
+      // re-thrown, because the application-wide error filter maps every 5xx
+      // HttpException to a generic 500 — a readiness probe must answer 503 with
+      // the minimal `Health` schema (the contract declares exactly 200/503).
       let database: 'up' | 'down' = 'up';
       try {
         await this.database.pingCheck('database', { timeout: 1000 });
       } catch {
         database = 'down';
       }
-      throw new ServiceUnavailableException({
+      response.status(503);
+      return {
         status: 'degraded',
         checks: { consumer: getConsumerStatus(), database },
-      });
+      };
     }
   }
 }
