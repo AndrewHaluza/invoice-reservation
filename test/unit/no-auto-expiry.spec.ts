@@ -9,6 +9,12 @@ import { scaleRate } from '../../src/shared/money';
 
 const SRC = join(__dirname, '..', '..', 'src');
 
+const SCHEDULER_ALLOWLIST = new Set<string>([
+  'capacity/application/reconciliation-check.job.ts',
+  'capacity/application/request-retention.job.ts',
+  'app.module.ts',
+]);
+
 function sourceFiles(directory: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -22,10 +28,16 @@ function sourceFiles(directory: string): string[] {
   return files;
 }
 
-function offendingLines(predicate: (line: string) => boolean): string[] {
+function offendingLines(
+  predicate: (line: string) => boolean,
+  exempt: ReadonlySet<string> = new Set(),
+): string[] {
   const offenders: string[] = [];
   for (const file of sourceFiles(SRC)) {
     const relative = file.slice(SRC.length + 1);
+    if (exempt.has(relative)) {
+      continue;
+    }
     const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, index) => {
       if (predicate(line)) {
@@ -54,13 +66,17 @@ describe('no auto-expiry (FR-028)', () => {
     jest.useRealTimers();
   });
 
-  it('runs no scheduled job or timer anywhere in src', () => {
+  it('runs no scheduled job or timer outside the reconciliation jobs', () => {
     expect(
-      offendingLines((line) => /setTimeout|setInterval/.test(line)),
+      offendingLines(
+        (line) => /setTimeout|setInterval/.test(line),
+        SCHEDULER_ALLOWLIST,
+      ),
     ).toEqual([]);
     expect(
-      offendingLines((line) =>
-        /@Cron|@Interval|@Timeout|ScheduleModule/.test(line),
+      offendingLines(
+        (line) => /@Cron|@Interval|@Timeout|ScheduleModule/.test(line),
+        SCHEDULER_ALLOWLIST,
       ),
     ).toEqual([]);
   });

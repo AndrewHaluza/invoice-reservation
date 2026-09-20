@@ -39,9 +39,9 @@ type ReservationRequest = Request & {
 @Controller('v1/programs/:programId')
 // Two named throttlers are registered globally ('read' 600/min, 'write' 120/min) and
 // @nestjs/throttler applies EVERY named throttler to EVERY route unless the route opts
-// out. Without this line a write would also consume the read budget, and the effective
-// limit on every route would silently be the tighter of the two.
-@SkipThrottle({ read: true })
+// out. The opt-out is per method, never on the class: a class-level `read` skip would
+// leave the reads unthrottled, and the effective limit on every route would silently be
+// the tighter of the two. Writes skip `read` (write budget only); reads skip `write`.
 export class CapacityController {
   constructor(
     private readonly reserveService: ReserveService,
@@ -53,6 +53,7 @@ export class CapacityController {
 
   @Post('reservations')
   @RequiredScope('capacity:write')
+  @SkipThrottle({ read: true })
   async createReservation(
     @Param('programId', new ParseUUIDPipe({ version: '4' })) programId: string,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -89,6 +90,7 @@ export class CapacityController {
 
   @Post('reservations/:invoiceId/releases')
   @RequiredScope('capacity:write')
+  @SkipThrottle({ read: true })
   async createRelease(
     @Param('programId', new ParseUUIDPipe({ version: '4' })) programId: string,
     @Param('invoiceId') invoiceId: string,
@@ -126,6 +128,7 @@ export class CapacityController {
 
   @Post('reservations/:invoiceId/cancellation')
   @RequiredScope('capacity:write')
+  @SkipThrottle({ read: true })
   async cancelReservation(
     @Param('programId', new ParseUUIDPipe({ version: '4' })) programId: string,
     @Param('invoiceId') invoiceId: string,

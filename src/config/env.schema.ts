@@ -21,4 +21,6 @@ export const envSchema = Joi.object({
   KAFKA_RETRY_MAX_ATTEMPTS: Joi.number().integer().min(1).default(5),
   KAFKA_RETRY_BASE_DELAY_MS: Joi.number().integer().min(0).default(200),
   KAFKA_RETRY_MAX_DELAY_MS: Joi.number().integer().min(0).default(10000),
+  RECONCILIATION_INTERVAL_SECONDS: Joi.number().integer().positive().default(300),
+  REQUEST_RETENTION_DAYS: Joi.number().integer().positive().default(30),
 });

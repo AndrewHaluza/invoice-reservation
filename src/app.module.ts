@@ -3,6 +3,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module';
 import { CapacityModule } from './capacity/capacity.module';
 import { entities } from './capacity/infrastructure/entities';
@@ -65,6 +66,7 @@ type CorrelationRequest = IncomingMessage & { correlationId?: string };
     TreasuryModule,
     MetricsModule,
     HealthModule,
+    ScheduleModule.forRoot(),
   ],
 })
 export class AppModule implements NestModule {

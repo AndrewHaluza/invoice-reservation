@@ -16,11 +16,14 @@
     "test": "jest",
     "test:cov": "jest --coverage",
     "test:unit": "jest test/unit",
+    "test:recovery": "jest --config jest.recovery.config.ts",
+    "test:perf": "jest --config jest.perf.config.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/data-source.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/data-source.ts",
     "seed": "ts-node scripts/seed.ts",
-    "audit:ledger": "ts-node scripts/audit-ledger.ts"
+    "audit:ledger": "ts-node scripts/audit-ledger.ts",
+    "reconcile": "ts-node scripts/reconcile.ts"
   },
   "dependencies": {
     "@nest-lab/throttler-storage-redis": "1.2.0",

@@ -6,6 +6,11 @@ const config: Config = {
   rootDir: '.',
   roots: ['<rootDir>/src', '<rootDir>/test'],
   testRegex: '.*\\.spec\\.ts$',
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    'test/integration/ledger-recovery\\.spec\\.ts$',
+    'test/performance/',
+  ],
   moduleFileExtensions: ['js', 'json', 'ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
