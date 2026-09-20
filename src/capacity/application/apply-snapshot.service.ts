@@ -264,6 +264,8 @@ export class ApplySnapshotService {
             `UPDATE program
                 SET treasury_version = $2,
                     treasury_effective_at = $3,
+                    treasury_applied_effective_at =
+                      GREATEST(COALESCE(treasury_applied_effective_at, $3), $3),
                     investigation_required = investigation_required OR $4,
                     position_verified = TRUE
               WHERE id = $1`,

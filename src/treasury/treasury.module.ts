@@ -9,6 +9,7 @@ import {
   TREASURY_RETRY_POLICY,
   TreasuryConsumer,
 } from './consumer/treasury.consumer';
+import { StreamLagProbe } from './consumer/stream-lag.probe';
 
 @Module({
   imports: [CapacityModule],
@@ -27,6 +28,7 @@ import {
       inject: [ConfigService],
     },
     TreasuryConsumer,
+    StreamLagProbe,
   ],
 })
 export class TreasuryModule {}

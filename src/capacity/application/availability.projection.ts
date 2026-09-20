@@ -36,6 +36,7 @@ export interface AvailabilityBody {
 export function toAvailabilityBody(
   program: ProgramEntity,
   reconciliationPending: boolean,
+  newestObservedEffectiveAtMs: number | null,
 ): AvailabilityBody {
   const position: ProgramPosition = program;
   const totalReservedMinor = totalReserved(position);
@@ -67,10 +68,29 @@ export function toAvailabilityBody(
     treasury: {
       appliedVersion: Number(program.treasuryVersion),
       effectiveAt: program.treasuryEffectiveAt?.toISOString() ?? null,
-      // The contract defines lag against the newest message available on the
-      // stream (FR-007a). No stream head is recorded until the phase 7 consumer
-      // exists, so the figure is not knowable: null, never a fabricated zero.
-      lagSeconds: null,
+      lagSeconds: lagSecondsFor(
+        program.treasuryAppliedEffectiveAt,
+        newestObservedEffectiveAtMs,
+      ),
     },
   };
+}
+
+// FR-007a: the distance between the newest treasury message applied to this
+// program and the newest one seen for it on the stream. Both operands are
+// business effective times from the message payload, so the difference is
+// meaningful and is zero for a caught-up program. Note this uses
+// treasuryAppliedEffectiveAt, which both apply paths advance — not
+// treasuryEffectiveAt, which only snapshots advance. Null means not knowable:
+// no treasury message has been applied, or this process has observed none for
+// the program. Null is never the same as zero.
+function lagSecondsFor(
+  appliedEffectiveAt: Date | null,
+  newestObservedEffectiveAtMs: number | null,
+): number | null {
+  if (appliedEffectiveAt === null || newestObservedEffectiveAtMs === null) {
+    return null;
+  }
+  const deltaMs = newestObservedEffectiveAtMs - appliedEffectiveAt.getTime();
+  return deltaMs <= 0 ? 0 : Math.floor(deltaMs / 1000);
 }

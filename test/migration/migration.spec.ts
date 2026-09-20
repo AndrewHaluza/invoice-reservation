@@ -275,4 +275,26 @@ describe('InitialSchema migration', () => {
       '23514',
     );
   });
+
+  it('adds a nullable treasury_applied_effective_at that reverses cleanly', async () => {
+    const appliedColumn = async (): Promise<
+      { is_nullable: string } | undefined
+    > => {
+      const rows = await ds.query<{ is_nullable: string }[]>(
+        `SELECT is_nullable
+           FROM information_schema.columns
+          WHERE table_name = 'program'
+            AND column_name = 'treasury_applied_effective_at'`,
+      );
+      return rows[0];
+    };
+
+    expect(await appliedColumn()).toEqual({ is_nullable: 'YES' });
+
+    await ds.undoLastMigration();
+    expect(await appliedColumn()).toBeUndefined();
+
+    await ds.runMigrations();
+    expect(await appliedColumn()).toEqual({ is_nullable: 'YES' });
+  });
 });

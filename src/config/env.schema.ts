@@ -9,6 +9,8 @@ export const envSchema = Joi.object({
   KAFKA_BROKERS: Joi.string().required(),
   KAFKA_SASL_USERNAME: Joi.string().required(),
   KAFKA_SASL_PASSWORD: Joi.string().required(),
+  KAFKA_SASL_DISABLED: Joi.string().valid('true', 'false').default('false'),
+  KAFKA_LAG_PROBE_ENABLED: Joi.string().valid('true', 'false').default('true'),
   KAFKA_CAPACITY_EVENTS_TOPIC: Joi.string().default('treasury.capacity.events'),
   KAFKA_SNAPSHOTS_TOPIC: Joi.string().default('treasury.capacity.snapshots'),
   KAFKA_DLQ_TOPIC: Joi.string().default('treasury.capacity.dlq'),

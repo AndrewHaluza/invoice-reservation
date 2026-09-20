@@ -16,7 +16,26 @@ describe('Late capacity delta (T069)', () => {
   let fixture: PostgresFixture;
   let ds: DataSource;
   let harness: TreasuryHarness;
+  let organisationId: string;
   let programId: string;
+
+  interface AppliedTimeRow {
+    treasury_applied_effective_at: Date | null;
+    treasury_effective_at: Date | null;
+  }
+
+  const readAppliedEffectiveTime = async (
+    id: string,
+  ): Promise<AppliedTimeRow> => {
+    const rows = await ds.query<AppliedTimeRow[]>(
+      `SELECT treasury_applied_effective_at, treasury_effective_at
+         FROM program WHERE id = $1`,
+      [id],
+    );
+    const row = rows[0];
+    if (row === undefined) throw new Error('program not found');
+    return row;
+  };
 
   beforeAll(async () => {
     fixture = await startPostgres();
@@ -29,7 +48,7 @@ describe('Late capacity delta (T069)', () => {
     await ds.initialize();
     await ds.runMigrations();
 
-    const organisationId = await insertOrganisation(ds, 't069-org');
+    organisationId = await insertOrganisation(ds, 't069-org');
 
     programId = await insertProgram(ds, organisationId, {
       currency: 'USD',
@@ -90,5 +109,69 @@ describe('Late capacity delta (T069)', () => {
       [programId],
     );
     expect(snapshot[0]?.treasury_version).toBe('10');
+  });
+
+  it('advances the applied effective time', async () => {
+    const appliedProgramId = await insertProgram(ds, organisationId, {
+      currency: 'USD',
+      creditLimitMinor: 1_000_000,
+    });
+    const effectiveAt = '2026-03-01T12:00:00.000Z';
+
+    await expect(
+      harness.handler.handle(
+        capacityEventMessage({
+          programId: appliedProgramId,
+          messageId: 'msg-applied-effective-0001',
+          version: 1,
+          effectiveAt,
+          amountMinor: '250',
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'applied' });
+
+    const applied = await readAppliedEffectiveTime(appliedProgramId);
+    expect(applied.treasury_applied_effective_at?.toISOString()).toBe(
+      effectiveAt,
+    );
+    expect(applied.treasury_effective_at).toBeNull();
+  });
+
+  it('does not move the applied effective time backwards', async () => {
+    const appliedProgramId = await insertProgram(ds, organisationId, {
+      currency: 'USD',
+      creditLimitMinor: 1_000_000,
+    });
+    const later = '2026-03-01T12:00:00.000Z';
+    const earlier = '2026-03-01T11:59:00.000Z';
+
+    await expect(
+      harness.handler.handle(
+        capacityEventMessage({
+          programId: appliedProgramId,
+          messageId: 'msg-applied-time-later',
+          version: 1,
+          effectiveAt: later,
+          amountMinor: '100',
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'applied' });
+
+    // Still valid and still applied, but its effective time is behind: the
+    // monotonic guard must keep the column at `later`.
+    await expect(
+      harness.handler.handle(
+        capacityEventMessage({
+          programId: appliedProgramId,
+          messageId: 'msg-applied-time-earlier',
+          version: 2,
+          effectiveAt: earlier,
+          amountMinor: '100',
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'applied' });
+
+    const applied = await readAppliedEffectiveTime(appliedProgramId);
+    expect(applied.treasury_applied_effective_at?.toISOString()).toBe(later);
   });
 });

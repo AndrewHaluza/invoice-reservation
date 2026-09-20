@@ -5,6 +5,7 @@ import { ReleaseService } from '../../src/capacity/application/release.service';
 import { IdempotencyService } from '../../src/capacity/application/idempotency.service';
 import { ProgramRepository } from '../../src/capacity/infrastructure/repositories/program.repository';
 import { UnitOfWork } from '../../src/capacity/infrastructure/unit-of-work';
+import { StreamLagRegistry } from '../../src/shared/stream-lag';
 import { PostgresFixture, startPostgres } from '../support/postgres-container';
 import {
   buildTreasuryHarness,
@@ -82,6 +83,7 @@ describe('Limit reduction below local reservations (T083)', () => {
       new UnitOfWork(ds),
       new ProgramRepository(),
       new IdempotencyService(),
+      new StreamLagRegistry(),
     );
   });
 

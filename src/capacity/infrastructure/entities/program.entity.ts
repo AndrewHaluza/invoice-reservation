@@ -33,6 +33,9 @@ export class ProgramEntity {
   @Column({ name: 'treasury_effective_at', type: 'timestamptz', nullable: true })
   treasuryEffectiveAt!: Date | null;
 
+  @Column({ name: 'treasury_applied_effective_at', type: 'timestamptz', nullable: true })
+  treasuryAppliedEffectiveAt!: Date | null;
+
   @Column({ name: 'position_changed_at', type: 'timestamptz' })
   positionChangedAt!: Date;
 

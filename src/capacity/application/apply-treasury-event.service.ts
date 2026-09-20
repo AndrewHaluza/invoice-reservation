@@ -172,6 +172,18 @@ export class ApplyTreasuryEventService {
               coordinates,
               now,
             );
+            // The echo was applied in the sense that matters for lag, so the
+            // applied effective time advances too. The guard makes the column
+            // monotonic: an out-of-order delivery that is still applied must not
+            // move the applied time backwards.
+            await manager.query(
+              `UPDATE program
+                  SET treasury_applied_effective_at = $2
+                WHERE id = $1
+                  AND (treasury_applied_effective_at IS NULL
+                       OR treasury_applied_effective_at < $2)`,
+              [event.programId, event.effectiveAt],
+            );
             return { kind: 'echo_suppressed' } as const;
           }
         }
@@ -187,6 +199,16 @@ export class ApplyTreasuryEventService {
           event.programId,
           result,
           now,
+        );
+        // The guard makes the column monotonic: an out-of-order delivery that is
+        // still applied must not move the applied time backwards.
+        await manager.query(
+          `UPDATE program
+              SET treasury_applied_effective_at = $2
+            WHERE id = $1
+              AND (treasury_applied_effective_at IS NULL
+                   OR treasury_applied_effective_at < $2)`,
+          [event.programId, event.effectiveAt],
         );
         await this.streamPositions.upsert(manager, event.programId, coordinates, now);
         return { kind: 'applied' } as const;

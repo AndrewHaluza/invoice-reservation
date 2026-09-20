@@ -7,6 +7,7 @@ import { ReserveService } from '../../src/capacity/application/reserve.service';
 import { ProgramRepository } from '../../src/capacity/infrastructure/repositories/program.repository';
 import { UnitOfWork } from '../../src/capacity/infrastructure/unit-of-work';
 import { CachedRateProvider } from '../../src/fx/cached-rate.provider';
+import { StreamLagRegistry } from '../../src/shared/stream-lag';
 import { PostgresFixture, startPostgres } from '../support/postgres-container';
 import {
   buildTreasuryHarness,
@@ -83,11 +84,13 @@ describe('Over-limit onset and clearance (T084)', () => {
       new ProgramRepository(),
       new IdempotencyService(),
       new CachedRateProvider(ds),
+      new StreamLagRegistry(),
     );
     releases = new ReleaseService(
       new UnitOfWork(ds),
       new ProgramRepository(),
       new IdempotencyService(),
+      new StreamLagRegistry(),
     );
   });
 

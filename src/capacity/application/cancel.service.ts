@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { StreamLagRegistry } from '../../shared/stream-lag';
 import { CapacityRefusal } from '../domain/errors';
 import { PendingLedgerEntry } from '../domain/ledger-entry';
 import { cancelPolicy } from '../domain/policies/cancel.policy';
@@ -82,6 +83,7 @@ export class CancelService {
     private readonly unitOfWork: UnitOfWork,
     private readonly programRepository: ProgramRepository,
     private readonly idempotency: IdempotencyService,
+    private readonly streamLag: StreamLagRegistry,
   ) {}
 
   async cancel(command: CancelCommand): Promise<CancelOutcome> {
@@ -200,7 +202,11 @@ export class CancelService {
           reservation: toReservationBody(
             toInvoiceReservationEntity(updatedRow),
           ),
-          availability: toAvailabilityBody(programAfter, false),
+          availability: toAvailabilityBody(
+            programAfter,
+            false,
+            this.streamLag.newestObservedFor(programAfter.id),
+          ),
         };
 
         await this.idempotency.complete(
