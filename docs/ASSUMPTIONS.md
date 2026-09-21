@@ -234,3 +234,51 @@ declared where it is used; the shape is deliberately duplicated and
 `src/capacity/api/response/health.response.ts` was deleted rather than re-exported. The
 duplication preserves the boundary, and a cross-element import would be a lint error rather than
 a convenience.
+
+## The mutation floor is a measured number, not a target
+
+The mutation gate's enforcement floor is derived arithmetically from one real run rather than
+chosen. That run is recorded in `specs/003-mutation-testing/baseline.md`, measured on 2026-09-21,
+and it scored **37.7%** over the 32 files of the six defended directories. The floor is that
+score rounded down to the nearest multiple of five: `break` = 35, with `low` = 40 and `high` =
+45 above it. Only `break` governs exit status; `low` and `high` are report colouring and an
+aspiration, and a run can exit zero while still reporting against them. The number is a fence
+around what the suite detects today, not a claim about the right level or a target to raise.
+Choosing a floor without measuring first, or setting it to 100, is forbidden.
+
+## `coverageAnalysis: 'perTest'` plus the TypeScript checker is a budget trade-off
+
+Stryker is configured with `coverageAnalysis: 'perTest'` and the `typescript` checker. `perTest`
+narrows each variant's test set to the tests that actually cover it, so a single alteration runs
+a handful of tests rather than the whole suite; the checker discards variants that cannot
+compile before any test runs against them. Together they are what buys the ten-minute budget at
+this scope, at the cost of a slower first run and a dependency on the coverage data being
+correct. If that data were wrong, a variant could be attributed to the wrong test set and scored
+on tests that never exercised it.
+
+## The mutation check is a separate workflow file, and a second job in `ci.yml` cannot replace it
+
+GitHub Actions path filters are workflow-level (`on.pull_request.paths`); there is no job-level
+`paths` key. A path-filtered job placed inside `ci.yml` would therefore suppress the workflow
+itself, and with it the existing `gate` job, on every pull request that touches no defended
+path. The check lives in `.github/workflows/mutation.yml` instead, with its own `paths` list and
+its own concurrency group, so the pre-existing gate's outcome is unchanged on every pull request.
+
+## The retained prior-run state was relocated from the requested path
+
+The feature request named `.stryker-tmp/incremental.json` for the retained prior-run state.
+`.stryker-tmp/` is Stryker's own sandbox — scratch space created and torn down around a run — so
+a file committed inside it is not durable. The state is written to `.stryker-incremental.json` at
+the repository root instead, which also keeps the git-ignore rules disjoint and avoids needing a
+negation rule. The behaviour requested is unchanged; only the path differs.
+
+## A source-scanning meta-test is excluded from the mutation run
+
+`test/unit/no-auto-expiry.spec.ts` asserts over the text of every file under `src/`. Stryker
+rewrites source into a sandbox, which collapses two constants in `src/capacity/domain/errors.ts`
+onto one line and trips that assertion. The test, the source and the tool are each correct; a
+test asserting over source text cannot compose with a tool whose method is rewriting source text.
+The spec is excluded from the mutation run only and still runs in every other suite. The cost is
+that the measured baseline understates the suite's true effectiveness, because that spec also
+holds behavioural assertions over `releasePolicy`, `cancelPolicy` and `scaleRate`; the floor is
+therefore slack rather than tight.
