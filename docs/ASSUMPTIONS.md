@@ -282,3 +282,53 @@ The spec is excluded from the mutation run only and still runs in every other su
 that the measured baseline understates the suite's true effectiveness, because that spec also
 holds behavioural assertions over `releasePolicy`, `cancelPolicy` and `scaleRate`; the floor is
 therefore slack rather than tight.
+
+## Idempotency and access control are covered end to end by the existing suites
+
+The feature request named four concerns — overbooking, idempotency, deadlock and access
+control — but only two of them lacked end-to-end evidence. `test/integration/reserve-endpoint.spec.ts`
+already asserts the exact replay returning `200` with an identical body, `403 INSUFFICIENT_SCOPE`
+for a token without `capacity:write`, and `404 NOT_FOUND` for another organisation's program,
+and the contract specs assert the same surface. Re-asserting any of it in `test/e2e/` was
+rejected under FR-012, which forbids a scenario that duplicates an existing end-to-end
+assertion.
+
+This is the feature's largest decision and the one most likely to be questioned later, so it
+is recorded rather than left implicit: the suite's value is the four refusals no HTTP test has
+observed, the boundary and single-program contention — not a second copy of the idempotency
+and RBAC proofs.
+
+## Two refusal cases cannot be provoked through the API, and the debt is recorded
+
+A multi-program deadlock cannot be expressed: `src/capacity/infrastructure/unit-of-work.ts`
+locks exactly one program per transaction, and every write route is mounted under
+`v1/programs/:programId`, so no supported request can take two programs in opposite orders
+(R-006). `INVALID_AMOUNT` cannot be observed over HTTP either: `CreateReleaseDto.amount` is a
+`PositiveMoneyDto` whose `amountMinor` carries `@Matches(/^[1-9][0-9]{0,18}$/)`, so the global
+`ValidationPipe` returns `400 VALIDATION_FAILED` before the domain guard that raises it runs
+(R-010).
+
+Both are recorded in the suite itself — the first at the head of `test/e2e/contention.spec.ts`
+and the second at the head of `test/e2e/refusals.spec.ts` — because SC-006 requires a reviewer
+to name both from the suite alone. The deadlock case carries a debt: a multi-program endpoint
+makes deadlock coverage owed the day it lands.
+
+## The end-to-end suite is excluded from `npm test` by a fourth Jest config
+
+`jest.config.ts` roots at `src` and `test` with `testRegex: '.*\.spec\.ts$'`, so any file under
+`test/` joins the default run and the 80% coverage gate automatically. Letting the end-to-end
+suite join would add several minutes of container start-up to every `npm test`, and its
+coverage contribution would move the gate's numbers without any change in `src/`.
+`jest.e2e.config.ts` spreads the base config and overrides `testPathIgnorePatterns` and
+`testRegex`, and one `testPathIgnorePatterns` entry in `jest.config.ts` keeps `test/e2e/` out —
+the mechanism the repository already uses for `test:recovery` and `test:perf`.
+
+## The `400` response names a refusal code a caller cannot observe
+
+`src/capacity/api/capacity.controller.ts` documents the `400` response at lines 109, 224 and 346
+as `'VALIDATION_FAILED or INVALID_AMOUNT'`, but a caller can never observe the second:
+`CreateReleaseDto.amount` is a `PositiveMoneyDto` whose `amountMinor` carries
+`@Matches(/^[1-9][0-9]{0,18}$/)`, so the global `ValidationPipe` returns
+`400 VALIDATION_FAILED` before the domain guard that raises `INVALID_AMOUNT` runs. FR-010
+forbids changing any production file to accommodate this suite, so the wording stands and the
+inaccuracy is recorded here instead.

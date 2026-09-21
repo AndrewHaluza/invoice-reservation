@@ -12,6 +12,7 @@ npm run typecheck && npm run lint
 npm test                      # all (integration needs Docker)
 npm run test:unit             # fast, no containers
 npm run test:cov              # enforces 80% global threshold
+npm run test:e2e             # end-to-end API suite over HTTP, needs Docker, not in `npm test`
 npm run migration:generate -- src/migrations/<Name>
 npm run migration:run | migration:revert
 npm run seed

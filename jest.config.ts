@@ -10,6 +10,7 @@ const config: Config = {
     '/node_modules/',
     'test/integration/ledger-recovery\\.spec\\.ts$',
     'test/performance/',
+    'test/e2e/',
   ],
   moduleFileExtensions: ['js', 'json', 'ts'],
   collectCoverageFrom: [
