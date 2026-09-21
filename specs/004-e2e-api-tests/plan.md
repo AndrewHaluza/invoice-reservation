@@ -46,12 +46,14 @@ Container start-up dominates; the scenarios themselves are a few dozen requests.
 **Constraints**: no existing test may be modified (FR-009); no production behaviour may
 change (FR-010); `npm test`, `npm run test:unit`, `npm run test:cov`, `npm run test:recovery`,
 `npm run test:perf`, `npm run test:mutation`, `npm run typecheck`, `npm run lint`,
-`npm run build` and `npm run docs:verify` must behave exactly as before (FR-011); no new
-cross-layer import (FR-015); no scenario may duplicate an existing end-to-end assertion
-(FR-012).
+`npm run build` and `npm run docs:verify` must behave exactly as before (FR-011); the suite
+imports only public entry points and `test/support/` (FR-015 — **not enforceable by lint**,
+because `boundaries/include` is scoped to `src/**/*.ts`, so verification is by inspection);
+no scenario may duplicate an existing end-to-end assertion (FR-012).
 
 **Scale/Scope**: 3 new spec files, 1 new support helper, 1 new Jest config, 1 script entry,
-1 CI step, 2 lines added to `jest.config.ts`. Roughly 20 assertions across 3 user stories.
+1 CI step, 1 line added to `jest.config.ts`, and two documentation touches. Roughly 20
+assertions across 3 user stories, delivered as 29 tasks.
 Measured baseline on 2026-09-21: **74 spec files** under `test/`, of which **20** boot the
 real `AppModule`; **14** refusal codes, of which **9** are observed over HTTP.
 
@@ -139,6 +141,8 @@ This feature adds no `src/` file. It touches the repository at exactly these poi
 │       ├── capacity-boundary.spec.ts# US2 — exact edge, one over, and after a release
 │       └── contention.spec.ts       # US3 — simultaneous writes on one program
 ├── docs/ASSUMPTIONS.md              # MODIFIED — four required entries
+├── README.md                        # MODIFIED — document `npm run test:e2e` (FR-008)
+├── CLAUDE.md                        # MODIFIED — add the command to the Commands block
 └── .github/workflows/
     ├── ci.yml                       # MODIFIED — one step in the existing gate job
     ├── release-gates.yml            # UNTOUCHED

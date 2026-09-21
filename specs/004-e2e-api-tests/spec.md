@@ -172,8 +172,15 @@ request pipeline.
 
 - **FR-001**: The suite MUST exercise the assembled application over HTTP, through the same
   request pipeline a real caller reaches — validation, authentication, authorisation, rate
-  limiting and error translation all in force. No scenario may call a service or repository
-  directly.
+  limiting and error translation all in force. **Every assertion MUST come from an HTTP
+  response or from reading the resulting database row.** No scenario may assert against a
+  service, repository or policy return value.
+- **FR-001a**: Establishing a precondition through an inbound handler is permitted **only**
+  where no HTTP route can reach the required state, and the scenario MUST then assert that
+  the precondition holds before issuing its request. Exactly one state qualifies today: a
+  program whose total position exceeds its credit limit, which no sequence of requests can
+  produce because the database constrains locally reserved capacity to the limit (R-001).
+  A precondition that a route *can* establish MUST be established through that route.
 - **FR-002**: The suite MUST assert, end to end, each refusal that is reachable through an
   ordinary request and not already observed over HTTP — over-limit, duplicate invoice,
   request in flight, and idempotency expired — checking the status, the code and the
@@ -189,8 +196,9 @@ request pipeline.
   query text at any depth.
 - **FR-007**: Every scenario MUST establish the state it depends on and MUST NOT depend on
   state left behind by any other scenario, in the same file or another.
-- **FR-008**: The suite MUST be runnable by a single documented command, separately from
-  the existing test commands.
+- **FR-008**: The suite MUST be runnable by a single command, separately from the existing
+  test commands, and that command MUST be documented wherever the project already documents
+  how to run its tests — a script entry alone does not satisfy "documented".
 - **FR-009**: The suite MUST NOT modify, weaken, skip or delete any existing test.
 - **FR-010**: The suite MUST NOT change any production behaviour. No source file outside
   the test tree and its own configuration may change to accommodate it.
@@ -204,8 +212,16 @@ request pipeline.
   reason, and MUST NOT be simulated below the API and presented as end-to-end evidence.
 - **FR-014**: The suite MUST run in the existing automated checks, and MUST NOT alter the
   behaviour, triggers or reported results of any existing automated check.
-- **FR-015**: The suite MUST NOT introduce a cross-layer import that the project's boundary
-  rules forbid.
+- **FR-015**: The suite MUST import only from a module's public entry point, from
+  `test/support/`, and from the seeded constants the existing tests use. It MUST NOT reach
+  into a layer's internals to shortcut a scenario.
+
+  > **This one cannot be delegated to the linter.** `eslint.config.mjs` sets
+  > `'boundaries/include': ['src/**/*.ts']`, so eslint-plugin-boundaries never evaluates a
+  > file under `test/` and `npm run lint` will pass whatever the suite imports. An earlier
+  > revision of this requirement said only "no cross-layer import the boundary rules
+  > forbid", which was unverifiable for exactly that reason. Verification is by inspection
+  > of the new files' import lists.
 - **FR-016**: A failure MUST identify which scenario failed, the expected and actual
   status, and the response code, without requiring the reader to re-run under a debugger.
 
@@ -230,9 +246,9 @@ request pipeline.
   once through an HTTP response: 13 of the 14 defined codes, up from 9 today. The
   fourteenth is unreachable by construction and is recorded as such rather than counted
   as a gap.
-- **SC-002**: The capacity boundary is proven by three deterministic single requests
-  completing in under 30 seconds in total, without relying on the existing
-  thousand-request storm.
+- **SC-002**: The capacity boundary is proven by deterministic single requests completing
+  in under 30 seconds in total **excluding container start-up**, without relying on the
+  existing thousand-request storm.
 - **SC-003**: Simultaneous writes against one program produce zero server errors and zero
   contention failures across every run, and the resulting position matches the accepted
   writes exactly.

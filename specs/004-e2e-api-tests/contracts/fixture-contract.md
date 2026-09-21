@@ -41,8 +41,14 @@ Established once per file in `beforeAll`, by the shared bootstrap:
   which writes a compensating entry.
 - **F-3.4** Write `over_limit_since` directly. The refusal does not read it (data-model.md),
   so such a scenario would assert a fixture and prove nothing.
-- **F-3.5** Call a service, repository or policy directly. FR-001 requires every assertion
-  to come from an HTTP response or from reading the resulting row.
+- **F-3.5** **Assert** against a service, repository or policy return value. FR-001 requires
+  every assertion to come from an HTTP response or from reading the resulting row.
+
+  This prohibits assertions, not setup. F-4 below *requires* a handler call to establish the
+  over-limit precondition, because no HTTP route can produce that state — FR-001a permits
+  exactly that, for exactly that state, and requires the precondition be asserted before the
+  request is issued. Any other precondition a route can establish must be established
+  through the route.
 - **F-3.6** Modify any existing file under `test/` other than the one line added to
   `jest.config.ts` (FR-009).
 
