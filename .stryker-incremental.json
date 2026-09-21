@@ -36222,9 +36222,9 @@
   },
   "schemaVersion": "1.0",
   "thresholds": {
-    "high": 45,
-    "low": 40,
-    "break": 35
+    "high": 100,
+    "low": 99,
+    "break": 99
   },
   "testFiles": {
     "test/unit/treasury-consumer.spec.ts": {
@@ -37885,11 +37885,11 @@
     "incrementalFile": ".stryker-incremental.json",
     "timeoutMS": 10000,
     "thresholds": {
-      "high": 45,
-      "low": 40,
-      "break": 35
+      "high": 100,
+      "low": 99,
+      "break": 99
     },
-    "configFile": "stryker.config.mjs",
+    "configFile": "stryker.uat-fail.config.mjs",
     "allowConsoleColors": true,
     "checkerNodeArgs": [],
     "commandRunner": {
