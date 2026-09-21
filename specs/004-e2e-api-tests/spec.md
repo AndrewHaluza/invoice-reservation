@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-21
 
-**Status**: Draft
+**Status**: Implemented — merged to `develop`; convergence tasks open in tasks.md
 
 **Input**: User description: "Need to add e2e api tests; Overbooking, idempotency, deadlock, RBAC; Tooling: jest, supertests"
 

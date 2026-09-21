@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-21
 
-**Status**: Draft
+**Status**: Implemented — merged to `develop`; convergence tasks open in tasks.md
 
 **Input**: User description: "docummentation (openapi) to be able see API documentation in swagger, import into API client; missing readme"
 

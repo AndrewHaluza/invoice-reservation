@@ -43,12 +43,30 @@ npm run test:mutation
 **Then**: write the score verbatim into `docs/testing-mutation.md` and
 `docs/ASSUMPTIONS.md`.
 
-> This number is **unknown until this scenario runs**. No artefact in this feature states
-> a predicted score, and none should. The scope is 32 files / 3400 lines; the variant
-> population is expected in the high hundreds to low thousands, but only the run is
+> Before the run, this number is **unknown**. No artefact in this feature predicted a
+> score, and none should have. The scope is 32 files / 3400 lines; only the run is
 > authoritative.
 
-Covers: FR-008, US1 scenario 1.
+**Measured** on 2026-09-21, Stryker 10.0.0, local workstation, wall-clock 3m 27s,
+with no `thresholds` block configured. Recorded verbatim, not rounded:
+
+| Metric | Value |
+|---|---|
+| Mutation score | 37.7% |
+| Killed (detected) | 308 |
+| Survived (undetected) | 94 |
+| Timeout (timed out) | 9 |
+| NoCoverage (never executed) | 429 |
+| CompileError | 690 |
+| Ignored | 0 |
+| Total variants | 1530 |
+
+34 of the 35 unit suites executed; `test/unit/no-auto-expiry.spec.ts` is excluded from the
+mutation run only (research R-010), so this score understates the suite's true
+effectiveness. `specs/003-mutation-testing/baseline.md` is the authoritative record and
+carries the full derivation; the figures above must agree with it.
+
+Covers: FR-004, FR-008, US1 scenario 1.
 
 ---
 

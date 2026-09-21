@@ -450,3 +450,18 @@ evidence at all.
   copy, never committed.
 - No new dependency (R-008). `package-lock.json` ends with an empty diff.
 - No scenario that duplicates an existing end-to-end assertion (FR-012), verified by T026.
+
+---
+
+## Phase 7: Convergence
+
+- [ ] T030 Extend the no-leaked-internals assertion to `test/e2e/capacity-boundary.spec.ts`
+      and `test/e2e/contention.spec.ts` per FR-006 (partial). `expectNoLeakedInternals` and
+      its `FORBIDDEN_BODY_KEYS` set (`stack`, `sql`, `query`, checked recursively at any
+      depth) exist today only in `test/e2e/refusals.spec.ts` lines 71-96. FR-006 binds every
+      response body the suite asserts, not one file: the `409 INSUFFICIENT_CAPACITY` body in
+      `capacity-boundary.spec.ts` and the burst bodies in `contention.spec.ts` are asserted
+      without it. Move the helper to `test/support/e2e-app.ts`, export it, import it in all
+      three spec files, and call it on every asserted response body. Do not weaken the
+      existing calls in `refusals.spec.ts`. FR-009 and FR-010 still apply — no existing test
+      outside `test/e2e/` and no `src/` file may change.

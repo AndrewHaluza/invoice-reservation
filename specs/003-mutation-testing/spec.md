@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-21
 
-**Status**: Draft
+**Status**: Implemented — merged to `develop`; converged, no open tasks
 
 **Input**: User description: "Add mutation testing to verify the existing test suite actually detects meaningful code changes."
 
