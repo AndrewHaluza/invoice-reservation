@@ -45,10 +45,11 @@ export default {
 
   timeoutMS: 10000,
 
+  // Derived arithmetically from the measured baseline in
+  // specs/003-mutation-testing/baseline.md, per contract C-2.5. `break` alone governs
+  // exit status; `high` and `low` are report colouring and aspiration only (FR-010).
+  thresholds: { high: 45, low: 40, break: 35 },
+
   // `concurrency` is deliberately left at the Stryker default. A laptop and a 2-4 vCPU
   // GitHub runner want different values and pinning one penalises the other.
-
-  // NO `thresholds` block yet. The floor is derived from the measured baseline in
-  // specs/003-mutation-testing/baseline.md and installed afterwards. Writing a guessed
-  // number here violates FR-009.
 };
