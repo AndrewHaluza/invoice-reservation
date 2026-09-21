@@ -73,6 +73,7 @@ at /docs/openapi.json, and the YAML document at /docs/openapi.yaml
 - `npm run test:recovery` — ledger recovery suite.
 - `npm run test:perf` — performance suite.
 - `npm run docs:verify` — the documentation gate.
+- `npm run test:mutation` — mutation suite, no Docker.
 
 ## Architecture
 
@@ -96,3 +97,4 @@ values, and its values are local development only.
 - [Kafka ACLs](docs/kafka-acls.md)
 - [Plans](docs/plans/)
 - [Specifications](specs/)
+- [Mutation testing](docs/testing-mutation.md)
