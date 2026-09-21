@@ -72,6 +72,9 @@ at /docs/openapi.json, and the YAML document at /docs/openapi.yaml
 - `npm run test:cov` — coverage, enforces the 80% global threshold.
 - `npm run test:recovery` — ledger recovery suite.
 - `npm run test:perf` — performance suite.
+- `npm run test:e2e` — end-to-end API suite: capacity refusals, the overbooking boundary
+  and single-program contention, driven over HTTP against the real application. Needs a
+  Docker daemon. Deliberately excluded from `npm test`.
 - `npm run docs:verify` — the documentation gate.
 - `npm run test:mutation` — mutation suite, no Docker.
 

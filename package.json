@@ -18,6 +18,7 @@
     "test:unit": "jest test/unit",
     "test:recovery": "jest --config jest.recovery.config.ts",
     "test:perf": "jest --config jest.perf.config.ts",
+    "test:e2e": "jest --config jest.e2e.config.ts",
     "test:mutation": "stryker run stryker.config.mjs",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/data-source.ts",

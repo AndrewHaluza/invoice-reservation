@@ -41,22 +41,22 @@ this feature adds `test/e2e/`. Root-level Jest configuration, matching the exist
 > is picked up by `npm test` **and** `npm run test:cov` automatically, breaching FR-011.
 > Do not create `test/e2e/` before T002 is complete.
 
-- [ ] T001 Create `jest.e2e.config.ts` at the repository root: import `Config` from `jest`
+- [x] T001 Create `jest.e2e.config.ts` at the repository root: import `Config` from `jest`
       and `base` from `./jest.config`, spread `base`, and override
       `testPathIgnorePatterns: ['/node_modules/']` and `testRegex: 'test/e2e/.*\.spec\.ts$'`.
       Mirror `jest.recovery.config.ts` exactly in shape, including its explanatory header
       comment stating why the suite is excluded from the default run.
 
-- [ ] T002 Add `'test/e2e/'` to the `testPathIgnorePatterns` array in `jest.config.ts`,
+- [x] T002 Add `'test/e2e/'` to the `testPathIgnorePatterns` array in `jest.config.ts`,
       after the existing `'test/performance/'` entry. This is the **only** permitted change
       to that file (contract C-4.2) — no other line may move.
 
-- [ ] T003 Add `"test:e2e": "jest --config jest.e2e.config.ts"` to the `scripts` block of
+- [x] T003 Add `"test:e2e": "jest --config jest.e2e.config.ts"` to the `scripts` block of
       `package.json`, placed immediately after `"test:perf"`. Add no dependency; per R-008
       every package the suite needs is already a direct devDependency, so
       `package-lock.json` must end with an empty diff.
 
-- [ ] T004 Verify the isolation before writing any test. Run `npm test` and
+- [x] T004 Verify the isolation before writing any test. Run `npm test` and
       `npm run test:cov` and record the suite count, test count and coverage percentages.
       Run `npm run test:e2e` and confirm it exits non-zero with "no tests found" (there are
       none yet) rather than running the existing suites. Confirm
@@ -74,7 +74,7 @@ baseline T025 compares against.
 
 **⚠️ CRITICAL**: no user story can begin until T005 is complete.
 
-- [ ] T005 Create `test/support/e2e-app.ts` exporting a fixture that starts the
+- [x] T005 Create `test/support/e2e-app.ts` exporting a fixture that starts the
       application and a matching teardown, following R-004 step by step:
       (1) `startPostgres()` and `startRedis()` from the existing
       `test/support/postgres-container.ts` and `test/support/redis-container.ts`;
@@ -99,7 +99,7 @@ baseline T025 compares against.
       parallel load and returns body-less `501`/`404` responses that never reached the Nest
       pipeline — exactly the symptom US3 exists to disprove.
 
-- [ ] T006 Add the teardown to `test/support/e2e-app.ts` per contract F-6, in order:
+- [x] T006 Add the teardown to `test/support/e2e-app.ts` per contract F-6, in order:
       read `ThrottlerStorage` from the app, `await app.close()`, then
       `storage.redis.disconnect()` (closing the app alone leaves the Redis client open and
       Jest hangs); destroy the owner `DataSource`; restore every environment variable the
@@ -121,12 +121,12 @@ over HTTP — `PROGRAM_OVER_LIMIT`, `DUPLICATE_INVOICE`, `REQUEST_IN_FLIGHT`,
 each of the four codes finds an assertion on a **response body**, not on a service return
 value.
 
-- [ ] T007 [US1] Create `test/e2e/refusals.spec.ts` with the shared bootstrap from
+- [x] T007 [US1] Create `test/e2e/refusals.spec.ts` with the shared bootstrap from
       `test/support/e2e-app.ts` in `beforeAll` and the teardown in `afterAll`. Add no
       scenario yet; confirm `npm run test:e2e` starts the containers, boots the app and
       reports zero tests. This isolates bootstrap failures from assertion failures.
 
-- [ ] T008 [US1] Add the over-limit scenario to `test/e2e/refusals.spec.ts`, following
+- [x] T008 [US1] Add the over-limit scenario to `test/e2e/refusals.spec.ts`, following
       contract F-4 exactly:
       (1) insert an organisation and a program with a known `credit_limit_minor` and a
       known `local_reserved_minor`, `position_verified` **true**;
@@ -150,7 +150,7 @@ value.
       set the position with `UPDATE` (F-3.3): Principle II forbids setting a position behind
       the ledger's back.
 
-- [ ] T009 [US1] Add the over-limit **clearance** scenario to `test/e2e/refusals.spec.ts`:
+- [x] T009 [US1] Add the over-limit **clearance** scenario to `test/e2e/refusals.spec.ts`:
       from the over-limit state, apply a snapshot returning the treasury figure to within
       the limit, then retry the same reservation and assert `201`, **and read
       `local_reserved_minor` back to confirm the reservation was recorded** (FR-005 applies
@@ -158,7 +158,7 @@ value.
       function of position, not a sticky flag. Use its own program row — T008's program
       must not be reused (F-2.1).
 
-- [ ] T010 [US1] Add the `DUPLICATE_INVOICE` scenario to `test/e2e/refusals.spec.ts`:
+- [x] T010 [US1] Add the `DUPLICATE_INVOICE` scenario to `test/e2e/refusals.spec.ts`:
       reserve an invoice successfully, then reserve **the same `invoiceId`** against the
       same program under a **different** `Idempotency-Key`. Assert status `409`,
       `body.code === 'DUPLICATE_INVOICE'`, and that `local_reserved_minor` reflects exactly
@@ -166,7 +166,7 @@ value.
       rather than an idempotency replay — with the same key it would return `200` and this
       scenario would prove nothing.
 
-- [ ] T011 [US1] Add the `REQUEST_IN_FLIGHT` and `IDEMPOTENCY_EXPIRED` scenarios to
+- [x] T011 [US1] Add the `REQUEST_IN_FLIGHT` and `IDEMPOTENCY_EXPIRED` scenarios to
       `test/e2e/refusals.spec.ts`. Per data-model.md, `request_record` is keyed on
       organisation plus request identifier and carries a state and a content fingerprint;
       a `PENDING` record yields `REQUEST_IN_FLIGHT` and a record aged past retention yields
@@ -199,10 +199,10 @@ thousand-request storm.
 **Independent Test**: `npm run test:e2e -- -t 'boundary'` passes in under 30 seconds
 excluding container start-up.
 
-- [ ] T012 [P] [US2] Create `test/e2e/capacity-boundary.spec.ts` with the shared bootstrap
+- [x] T012 [P] [US2] Create `test/e2e/capacity-boundary.spec.ts` with the shared bootstrap
       and teardown from `test/support/e2e-app.ts`.
 
-- [ ] T013 [US2] Add the **exactly available** scenario: insert a program whose
+- [x] T013 [US2] Add the **exactly available** scenario: insert a program whose
       `position_verified` is true, whose total is within the limit, and whose currency
       matches the request — per data-model.md the refusal checks run in the order
       `POSITION_UNVERIFIED` → `PROGRAM_OVER_LIMIT` → `FX_RATE_UNAVAILABLE` →
@@ -212,7 +212,7 @@ excluding container start-up.
       computed in `bigint`. Assert `201` and that the reflected availability reports nothing
       remaining.
 
-- [ ] T014 [US2] Add the **one over** scenario, against its own fresh program: reserve
+- [x] T014 [US2] Add the **one over** scenario, against its own fresh program: reserve
       `available + 1n`. Assert status `409`, `body.code === 'INSUFFICIENT_CAPACITY'`, and
       assert `body.details.requestedMinor` and `body.details.availableMinor` as decimal
       strings — the policy sets both, and asserting them pins the arithmetic rather than
@@ -224,12 +224,12 @@ excluding container start-up.
       thousand-request storm reserves 1,000 against a 100,000 limit, so no request in it
       ever lands on the edge.
 
-- [ ] T015 [US2] Add the **capacity returns** scenario: on a program with nothing
+- [x] T015 [US2] Add the **capacity returns** scenario: on a program with nothing
       remaining, release part of a prior reservation, then reserve the released amount and
       assert `201`. Proves released capacity re-enters the boundary calculation rather than
       leaking.
 
-- [ ] T016 [US2] Assert the recorded position after each of T013, T014 and T015 by reading
+- [x] T016 [US2] Assert the recorded position after each of T013, T014 and T015 by reading
       `local_reserved_minor` back from the program row (FR-005). Every amount sent and
       asserted must be a decimal string in minor units with an explicit currency, and every
       computation must be `bigint` — Principle I forbids a floating-point step anywhere,
@@ -246,10 +246,10 @@ error or a serialization failure, and the resulting position is exact.
 
 **Independent Test**: `npm run test:e2e -- -t 'contention'` passes.
 
-- [ ] T017 [P] [US3] Create `test/e2e/contention.spec.ts` with the shared bootstrap and
+- [x] T017 [P] [US3] Create `test/e2e/contention.spec.ts` with the shared bootstrap and
       teardown from `test/support/e2e-app.ts`.
 
-- [ ] T018 [US3] Add the simultaneous-reservations scenario: against one program with
+- [x] T018 [US3] Add the simultaneous-reservations scenario: against one program with
       capacity for all of them, issue **exactly five** reservations at once from the same
       organisation, each with its own `invoiceId` and its own `Idempotency-Key`. Five is
       enough to serialize on the row lock without approaching the thousand-request storm in
@@ -259,15 +259,15 @@ error or a serialization failure, and the resulting position is exact.
       Postgres `40001` and `40P01` as transient, so either code reaching a caller is the
       defect this scenario catches.
 
-- [ ] T019 [US3] Assert the resulting position equals the sum of the accepted reservations
+- [x] T019 [US3] Assert the resulting position equals the sum of the accepted reservations
       exactly, read back from `local_reserved_minor`. No write lost, none double-counted.
 
-- [ ] T020 [US3] Add the mixed-operation scenario: issue a reservation, a release of an
+- [x] T020 [US3] Add the mixed-operation scenario: issue a reservation, a release of an
       earlier reservation and a cancellation of another, simultaneously against the same
       program. Assert each is accepted or refused on its own merits and that none fails for
       contention.
 
-- [ ] T021 [US3] Add a comment at the head of `test/e2e/contention.spec.ts` recording what
+- [x] T021 [US3] Add a comment at the head of `test/e2e/contention.spec.ts` recording what
       this file deliberately does **not** test and why: a genuine multi-program deadlock
       needs two transactions taking two programs in opposite orders;
       `src/capacity/infrastructure/unit-of-work.ts` locks exactly one program per
@@ -282,14 +282,14 @@ error or a serialization failure, and the resulting position is exact.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T022 Add a `Run end-to-end API tests` step to the existing `gate` job in
+- [x] T022 Add a `Run end-to-end API tests` step to the existing `gate` job in
       `.github/workflows/ci.yml`, running `npm run test:e2e`, placed after `Coverage gate`
       and before `Build`. Change no existing step's command, order or name. `gate` already
       has a Docker daemon and `timeout-minutes: 30`, which accommodates the 5-minute budget.
       Leave `.github/workflows/release-gates.yml` and `.github/workflows/mutation.yml`
       untouched — `mutation.yml` arrived with feature 003, merged as pull request #17.
 
-- [ ] T023 Add **four** entries to `docs/ASSUMPTIONS.md`, each with its rationale:
+- [x] T023 Add **four** entries to `docs/ASSUMPTIONS.md`, each with its rationale:
       (1) the scope cut — idempotency and access control were found already covered end to
       end and re-asserting them was rejected under FR-012; this is the feature's largest
       decision and the one most likely to be questioned later;
@@ -307,7 +307,7 @@ error or a serialization failure, and the resulting position is exact.
 
       The merge gate requires this file to be current, so omitting these blocks merge.
 
-- [ ] T024 Prove the new assertions can fail (SC-008, Constitution Principle VI). On a
+- [x] T024 Prove the new assertions can fail (SC-008, Constitution Principle VI). On a
       **scratch copy only, never the working branch**, change `reservedMinor > availableMinor`
       to `reservedMinor >= availableMinor` in
       `src/capacity/domain/policies/reserve.policy.ts`, run `npm run test:e2e`, and confirm
@@ -315,7 +315,7 @@ error or a serialization failure, and the resulting position is exact.
       confirm `git status --porcelain` is clean. The mutated source is never committed —
       FR-010 forbids changing production behaviour, and this is a throwaway probe.
 
-- [ ] T025 Run the full isolation check of contract C-4 and compare against the T004
+- [x] T025 Run the full isolation check of contract C-4 and compare against the T004
       baseline: `npm test`, `npm run test:unit`, `npm run test:cov`, `npm run test:recovery`
       is unchanged, `npm run test:mutation`, `npm run typecheck`, `npm run lint`,
       `npm run build`, `npm run docs:verify`. `npm test` must report the **same** suite and
@@ -325,7 +325,7 @@ error or a serialization failure, and the resulting position is exact.
       `stryker.config.mjs`, `jest.recovery.config.ts`, `jest.perf.config.ts` and
       `package-lock.json` prints nothing.
 
-- [ ] T026 Verify FR-012 by hand: for every scenario added in T008–T020, confirm no
+- [x] T026 Verify FR-012 by hand: for every scenario added in T008–T020, confirm no
       existing end-to-end test already makes the same assertion. Check especially
       `test/integration/reserve-endpoint.spec.ts`, `test/integration/concurrency.spec.ts`,
       `test/contract/reservations.contract.spec.ts`,
@@ -343,13 +343,13 @@ error or a serialization failure, and the resulting position is exact.
       `src/app.module`, `src/shared/validation/create-validation-pipe`, plus the seeded
       constants from `scripts/seed`.
 
-- [ ] T027 Run every scenario in `specs/004-e2e-api-tests/quickstart.md` in order, 1
+- [x] T027 Run every scenario in `specs/004-e2e-api-tests/quickstart.md` in order, 1
       through 7, plus the repository hygiene check. Record the wall time of
       `npm run test:e2e` and confirm it is under 5 minutes (SC-004). Separately record the
       wall time of `npm run test:e2e -- -t 'boundary'` **excluding container start-up** and
       confirm it is under 30 seconds (SC-002); Jest's per-suite time is the figure to use.
 
-- [ ] T028 Document the command (FR-008). Add `npm run test:e2e` wherever the project
+- [x] T028 Document the command (FR-008). Add `npm run test:e2e` wherever the project
       already documents how to run its tests, alongside `test:recovery` and `test:perf`:
       the Commands block of `CLAUDE.md` and the testing section of `README.md`. State in one
       line what the suite covers, that it needs a container runtime, and that it is
@@ -357,7 +357,7 @@ error or a serialization failure, and the resulting position is exact.
       satisfy "documented" — feature 003 shipped `docs/testing-mutation.md` plus README
       links for the same reason.
 
-- [ ] T029 Verify the failure output (FR-016). On a scratch copy only, break one assertion
+- [x] T029 Verify the failure output (FR-016). On a scratch copy only, break one assertion
       in `test/e2e/capacity-boundary.spec.ts` — change the expected status of the
       `available + 1` scenario from `409` to `200` — run `npm run test:e2e`, and capture the
       output. Confirm it names the failing scenario, both the expected and the actual
