@@ -48,7 +48,7 @@ export default {
   // Derived arithmetically from the measured baseline in
   // specs/003-mutation-testing/baseline.md, per contract C-2.5. `break` alone governs
   // exit status; `high` and `low` are report colouring and aspiration only (FR-010).
-  thresholds: { high: 45, low: 40, break: 35 },
+  thresholds: { high: 45, low: 40, break: 38 },
 
   // `concurrency` is deliberately left at the Stryker default. A laptop and a 2-4 vCPU
   // GitHub runner want different values and pinning one penalises the other.
