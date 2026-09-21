@@ -1013,6 +1013,171 @@ Expected:
 
 ---
 
+---
+
+### Task 3a: Narrow conformance test 12 to codes observable over HTTP
+
+**Status: planning decision issued 2026-09-21, in response to an executor stop at Task 3.**
+This task supersedes Task 3's "stop and report" edge case and Task 7's blanket prohibition
+on modifying the conformance spec. Task 7's prohibition stands for every other part of that
+file; it is lifted **only** for test 12's iteration set, as specified below.
+
+#### Background — the contradiction
+
+Task 3 correctly changed the three `@ApiResponse` `400` descriptions from
+`'VALIDATION_FAILED or INVALID_AMOUNT'` to `'VALIDATION_FAILED'`. Those three descriptions
+were the **only** place the string `INVALID_AMOUNT` appeared in the generated document.
+
+`test/contract/openapi-conformance.contract.spec.ts` test 12,
+`'12. every refusal code is documented and 503 never means anything else'`, does:
+
+```ts
+const serialised = JSON.stringify(document);
+for (const code of REFUSAL_CODES) {
+  expect(serialised).toContain(code);
+}
+```
+
+`REFUSAL_CODES` in `src/capacity/domain/errors.ts` still contains `'INVALID_AMOUNT'`, so
+test 12 now fails: `npm test` reports 1 failed / 528 passed.
+
+The oracle, `specs/001-program-capacity-reservation/contracts/errors.md`, **never lists
+`INVALID_AMOUNT` at all**. The document after Task 3 is therefore closer to the oracle than
+before it. Test 12 is over-broad relative to the contract it exists to enforce: it demands
+every domain refusal code appear in the HTTP document, but one of them is unreachable over
+HTTP by construction.
+
+#### Rejected alternatives
+
+- **Revert Task 3.** Rejected: it would restore the documented defect this feature exists to
+  remove, and move the document away from the oracle.
+- **Remove `INVALID_AMOUNT` from `REFUSAL_CODES`.** Rejected: `releasePolicy` genuinely
+  raises it, and it is reachable at the domain layer. Task 3 already forbids this.
+- **Add `enum: REFUSAL_CODES` to `ErrorResponse.code` in
+  `src/capacity/api/response/error.response.ts`.** Rejected, and this is the trap: it would
+  make the document assert that a caller can receive `INVALID_AMOUNT` — the exact claim Task
+  3 removed — and it would be wrong in the other direction too, because `VALIDATION_FAILED`
+  is the code a caller actually receives on a `400` and is not a member of `REFUSAL_CODES`.
+
+#### Objective
+
+Make test 12 assert what the contract actually requires: every refusal code a caller can
+observe over HTTP is documented, and every code that cannot be observed is provably absent.
+
+#### Files
+
+- `test/contract/openapi-conformance.contract.spec.ts` — MODIFIED. Test 12 only.
+- `docs/ASSUMPTIONS.md` — MODIFIED. Extend the section Task 3 rewrote.
+
+#### Implementation
+
+1. In `test/contract/openapi-conformance.contract.spec.ts`, above the `it('12. ...')` block,
+   add a module-scope constant with an explanatory comment:
+
+   ```ts
+   /**
+    * Refusal codes that exist in the domain but cannot be observed over HTTP, so the
+    * generated document must NOT document them. `INVALID_AMOUNT` is raised by
+    * `releasePolicy` for a non-positive release amount, but `CreateReleaseDto.amount` is a
+    * `PositiveMoneyDto` whose `amountMinor` carries `@Matches(/^[1-9][0-9]{0,18}$/)`, so the
+    * global ValidationPipe returns `400 VALIDATION_FAILED` before the domain guard runs.
+    * `specs/001-program-capacity-reservation/contracts/errors.md` — the oracle — does not
+    * list it either.
+    */
+   const UNREACHABLE_OVER_HTTP: readonly string[] = ['INVALID_AMOUNT'];
+   ```
+
+2. Replace the first five lines of test 12's body:
+
+   ```ts
+   const serialised = JSON.stringify(document);
+   for (const code of REFUSAL_CODES) {
+     expect(serialised).toContain(code);
+   }
+   ```
+
+   with:
+
+   ```ts
+   const serialised = JSON.stringify(document);
+   for (const code of REFUSAL_CODES) {
+     if (UNREACHABLE_OVER_HTTP.includes(code)) {
+       // Documenting it would tell a caller about a code it can never receive.
+       expect(serialised).not.toContain(code);
+       continue;
+     }
+     expect(serialised).toContain(code);
+   }
+   ```
+
+3. Change **nothing else** in test 12. The `expect(REFUSAL_STATUS.POSITION_UNVERIFIED).toBe(503)`
+   assertion and the whole `503` loop below it stay exactly as they are.
+
+4. Change nothing else in the file. Tests 1-11 and 13-16 are untouched.
+
+5. In `docs/ASSUMPTIONS.md`, find the section headed
+   ``## The `400` response names a refusal code a caller cannot observe`` — Task 3 rewrote
+   its body to record that the descriptions were corrected. Append two sentences to that same
+   body recording the consequence: conformance test 12 previously required every member of
+   `REFUSAL_CODES` to appear in the generated document, and `INVALID_AMOUNT` satisfied it only
+   through the inaccurate `400` descriptions; test 12 now excludes the codes listed in its
+   `UNREACHABLE_OVER_HTTP` constant and asserts their **absence** instead, so the document
+   cannot silently regain the claim. Do not add a new `##` section for this.
+
+#### Constraints
+
+- Do not modify `src/capacity/domain/errors.ts`, `src/capacity/api/error.filter.ts`, or
+  `src/capacity/api/response/error.response.ts`.
+- Do not modify `specs/001-program-capacity-reservation/contracts/errors.md` or
+  `contracts/http-api.yaml`. They are the oracle.
+- Do not re-add `INVALID_AMOUNT` to any `@ApiResponse` description.
+- Do not delete, skip, or rename test 12, and do not touch any other test in the file.
+- Do not add `VALIDATION_FAILED` to `REFUSAL_CODES`.
+- `UNREACHABLE_OVER_HTTP` must contain exactly one entry, `'INVALID_AMOUNT'`. Do not add a
+  second entry to make some other assertion pass — if a second code turns out to be
+  undocumented, that is a real finding: stop and report it.
+
+#### Edge Cases
+
+- **`expect(serialised).not.toContain('INVALID_AMOUNT')` fails**, meaning the string is still
+  somewhere in the document. Find it and report where. Do not weaken the assertion. The most
+  likely cause is a fourth `@ApiResponse` description Task 3 missed, which Task 3's own edge
+  case required searching for.
+- **A different refusal code is missing from the document**, so the `toContain` branch fails
+  for something other than `INVALID_AMOUNT`. That is a genuine documentation gap, not this
+  task's business. Stop and report the code; do not add it to `UNREACHABLE_OVER_HTTP`.
+- **This spec needs Docker.** It boots `AppModule` against real Postgres and Redis. If no
+  daemon is reachable, stop and report rather than marking the task done on a skipped suite.
+
+#### Verification
+
+This spec needs a running Docker daemon.
+
+```bash
+cd /Users/nd/Work/projects/invoice-reservation
+npx jest test/contract/openapi-conformance.contract.spec.ts
+npm test
+npm run typecheck
+npm run lint
+npm run docs:verify
+```
+
+Expected:
+- The conformance spec passes in full, test 12 included.
+- `npm test` reports **0 failed**. The previously failing test 12 now passes, giving 529
+  passed and 0 failed against the 528-passed/1-failed state this task inherits.
+- `typecheck`, `lint` and `docs:verify` all exit zero.
+
+#### Completion Criteria
+
+- [ ] `UNREACHABLE_OVER_HTTP` exists in the conformance spec with exactly one entry and the explanatory comment.
+- [ ] Test 12 asserts presence for reachable codes and **absence** for unreachable ones.
+- [ ] No other test in the conformance spec changed.
+- [ ] No file under `src/` and no file under `specs/001-program-capacity-reservation/contracts/` changed.
+- [ ] `npm test` reports 0 failed.
+- [ ] The ASSUMPTIONS section records the test-12 narrowing in the existing section's body.
+
+
 ## Final Verification
 
 1. Confirm no production behaviour regressed and no pre-existing gate changed its verdict.
