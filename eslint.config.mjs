@@ -13,6 +13,8 @@ export default [
       'docs/**',
       '.specify/**',
       '.karst/**',
+      'stryker.config.mjs',
+      'jest.mutation.config.js',
     ],
   },
   ...tseslint.configs.recommended.map((config) => ({
