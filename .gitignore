@@ -6,3 +6,4 @@ coverage/
 .karst/worktrees/
 reports/
 .stryker-tmp/
+.claude/worktrees/
