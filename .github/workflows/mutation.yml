@@ -1,0 +1,66 @@
+name: Mutation
+
+# A SEPARATE workflow file, deliberately not a second job in ci.yml. GitHub Actions
+# path filters are workflow-level (`on.pull_request.paths`); there is no job-level
+# `paths` key. Filtering inside ci.yml would suppress its existing `gate` job on every
+# pull request touching no defended path — a direct FR-015 violation. See contract C-9.1
+# and research R-005.
+on:
+  pull_request:
+    paths:
+      - 'src/capacity/domain/**'
+      - 'src/capacity/application/**'
+      - 'src/shared/money/**'
+      - 'src/shared/result/**'
+      - 'src/treasury/handlers/**'
+      - 'src/treasury/retry/**'
+      - 'stryker.config.mjs'
+      - 'jest.mutation.config.js'
+      - 'package.json'
+      # The lockfile is listed explicitly: a Stryker patch bump moves only
+      # package-lock.json, changing the gate's behaviour while touching no other
+      # filtered path, and would otherwise slip through unexercised (contract C-10.3).
+      - 'package-lock.json'
+  schedule:
+    # 05:00 UTC, NOT 03:00 — release-gates.yml already occupies that hour. GitHub queues
+    # scheduled workflows and delays them under load, so two nightly runs on the same
+    # hour compete for the same runner allowance and both arrive late (contract C-10.4).
+    # Note: schedule triggers fire on the default branch (`develop`) only.
+    - cron: '0 5 * * *'
+
+# Distinct from ci.yml's `ci-${{ github.ref }}`, which carries cancel-in-progress: true.
+# A shared group would let a mutation run cancel, or be cancelled by, an unrelated CI run
+# on the same ref (contract C-9.4).
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    # Above the 10-minute budget so a merely slow run still reports, well below ci.yml's
+    # 30 so a runaway fails fast.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Mutation testing
+        run: npm run test:mutation
+
+      # always(), not the default. A failing run is exactly when the surviving variants
+      # need inspecting, so the artefact must survive a threshold failure (FR-018,
+      # contract C-12, SC-010).
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          if-no-files-found: error
