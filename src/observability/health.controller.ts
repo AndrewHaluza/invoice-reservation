@@ -4,6 +4,7 @@ import {
   Injectable,
   Res,
 } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   HealthCheckService,
@@ -13,6 +14,7 @@ import {
 import type { Response } from 'express';
 import { Public } from '../shared/public';
 import { getConsumerStatus } from '../shared/health/consumer-health';
+import { HealthProbeResponse } from './health.response';
 
 /**
  * The minimal `Health` schema from `contracts/http-api.yaml`. It deliberately
@@ -45,6 +47,7 @@ function toChecks(details: HealthIndicatorResult): Record<string, 'up' | 'down'>
 
 // Probes are read-only traffic: they consume the read bucket and never the write bucket.
 @SkipThrottle({ write: true })
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
   constructor(
@@ -55,12 +58,31 @@ export class HealthController {
 
   @Get('live')
   @Public()
+  @ApiOperation({
+    operationId: 'live',
+    summary: 'Liveness probe. Reports that the process is running.',
+  })
+  @ApiResponse({ status: 200, description: 'The process is alive.', type: HealthProbeResponse })
   live(): { status: 'ok' } {
     return { status: 'ok' };
   }
 
   @Get('ready')
   @Public()
+  @ApiOperation({
+    operationId: 'ready',
+    summary: 'Readiness probe. Reports whether dependencies are reachable.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Every dependency is reachable.',
+    type: HealthProbeResponse,
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'At least one dependency is unavailable. The body names which.',
+    type: HealthProbeResponse,
+  })
   async ready(
     @Res({ passthrough: true }) response: Response,
   ): Promise<HealthResponse> {

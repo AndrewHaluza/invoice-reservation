@@ -166,3 +166,71 @@ be left with unreleasable capacity. It is detected by the invariant being
 asserted in `test/unit/release-policy.spec.ts` and by
 `test/integration/release-nets-to-zero.spec.ts` proving the `LOCAL` component
 sums to zero across a full repayment.
+
+## The documentation routes are unauthenticated, gated by `API_DOCS_ENABLED`
+
+`/docs`, and the raw document at `/docs/openapi.json` and `/docs/openapi.yaml`, require no
+credential, which Constitution Principle V requires be justified per route. They publish the
+API's contract — schemas and seeded example identifiers — and carry no organisation, program,
+invoice or ledger data, so there is nothing on them to authorise. Exposure is gated by
+`API_DOCS_ENABLED`, which `src/config/env.schema.ts` defaults to `'false'` when
+`NODE_ENV === 'production'` and `'true'` otherwise. When it is disabled, `mountApiDocs()` in
+`src/docs/docs.bootstrap.ts` returns without mounting anything, so a request is answered by the
+global catch-all filter with the same `404` / `NOT_FOUND` body as any unknown path and discloses
+nothing. Requests issued from the page traverse the identical guard chain, validation pipe and
+per-organisation rate limiter as any other caller, verified by
+`test/integration/docs-endpoints.spec.ts`. If the assumption that the document is contract-only
+is wrong, what is disclosed is a design artifact rather than tenant data, and it can be withdrawn
+by leaving the flag disabled.
+
+## The served OpenAPI document is generated, not hand-written
+
+A hand-maintained document drifts from the service by default, and Principle VII requires
+documentation to track the running service. The document is therefore generated at mount time by
+`buildOpenApiDocument()` from the application's own decorators, so it cannot describe an
+operation the router does not expose. `test/contract/openapi-conformance.contract.spec.ts`
+asserts the generated document against both the live router and
+`specs/001-program-capacity-reservation/contracts/http-api.yaml`, so a router or schema change
+the document omits is a failing test rather than a silent drift.
+
+## The 001 contract is retained as the oracle, not replaced
+
+`specs/001-program-capacity-reservation/contracts/http-api.yaml` remains the design statement and
+the response-schema source for the existing contract suite, while the generated document is what
+is served. Neither is hand-synchronised with the other; the contract suite is what holds the two
+together, and a divergence is surfaced there rather than by an edit to either file.
+
+## The `@nestjs/swagger` CLI plugin is not enabled
+
+The plugin infers schemas from TypeScript types, which would type money without a pattern, and it
+does not run under `ts-node` or `ts-jest`, so a document built in a test would differ from one
+built by `nest build`. Explicit `@ApiProperty` decorators are used instead; the cost is
+verbosity, paid once at each property, against a document that is identical whether built by the
+running application or by a test.
+
+## Schema-level unit tests build their document from a minimal empty module
+
+The schema and metadata unit specs build their document from an empty module with `extraModels`,
+so they stay Docker-free and run in the fast suite. Router-level assertions require the real
+application and therefore live in the contract suite,
+`test/contract/openapi-conformance.contract.spec.ts`, which requires Docker. If the assumption
+that a minimal module exercises the same decorator surface is wrong, a schema defect could pass
+the unit specs and be caught only by the contract suite.
+
+## `REFUSAL_STATUS` and `REFUSAL_CODES` were exported for the error contract
+
+`STATUS` in `src/capacity/api/error.filter.ts` was exported as `REFUSAL_STATUS`, and
+`REFUSAL_CODES` was added to `src/capacity/domain/errors.ts`, solely so the documented error
+contract can be asserted against the mapping the service actually applies, in
+`test/contract/openapi-conformance.contract.spec.ts` and `test/unit/refusal-status.spec.ts`. No
+behaviour changed; the filter still responds with the same codes and bodies.
+
+## The health documentation class is declared in the observability element
+
+The health documentation class is the local `HealthProbeResponse` in
+`src/observability/health.response.ts`, rather than being imported from
+`src/capacity/api/response/`. The `observability` element may not import `api`, so the class is
+declared where it is used; the shape is deliberately duplicated and
+`src/capacity/api/response/health.response.ts` was deleted rather than re-exported. The
+duplication preserves the boundary, and a cross-element import would be a lint error rather than
+a convenience.

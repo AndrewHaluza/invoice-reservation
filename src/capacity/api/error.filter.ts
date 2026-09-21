@@ -37,7 +37,7 @@ const MESSAGES: Record<RefusalCode, string> = {
   NOT_FOUND: 'The program or reservation does not exist.',
 };
 
-const STATUS: Record<RefusalCode, number> = {
+export const REFUSAL_STATUS: Record<RefusalCode, number> = {
   INSUFFICIENT_CAPACITY: 409,
   PROGRAM_OVER_LIMIT: 409,
   DUPLICATE_INVOICE: 409,
@@ -134,7 +134,7 @@ export class CapacityErrorFilter implements ExceptionFilter {
       if (exception.details !== undefined) {
         body.details = exception.details;
       }
-      response.status(STATUS[exception.code]).json(body);
+      response.status(REFUSAL_STATUS[exception.code]).json(body);
       return;
     }
 
