@@ -18,7 +18,7 @@ npm run test:mutation
 ```
 
 **Expected**:
-- `test:unit` reports **29 passed suites, 287 tests** in roughly 6 seconds.
+- `test:unit` reports **35 passed suites, 324 tests** in roughly 7 seconds.
 - The mutation run emits live progress, then a summary carrying the score and four
   separate counts: detected, undetected, timed out, never executed.
 - It completes on a machine with the Docker daemon stopped.
@@ -44,7 +44,7 @@ npm run test:mutation
 `docs/ASSUMPTIONS.md`.
 
 > This number is **unknown until this scenario runs**. No artefact in this feature states
-> a predicted score, and none should. The scope is 32 files / 3383 lines; the variant
+> a predicted score, and none should. The scope is 32 files / 3400 lines; the variant
 > population is expected in the high hundreds to low thousands, but only the run is
 > authoritative.
 

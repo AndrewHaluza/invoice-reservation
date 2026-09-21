@@ -113,9 +113,9 @@ directories have subdirectories):
 | `src/shared/result` | 2 | 34 |
 | `src/treasury/handlers` | 2 | 118 |
 | `src/treasury/retry` | 1 | 210 |
-| **Total** | **32** | **3383** |
+| **Total** | **32** | **3400** |
 
-**Unit suite**: 29 suites / 287 tests / ~6.0 s (measured 2026-09-21).
+**Unit suite**: 35 suites / 324 tests / ~6.9 s (measured 2026-09-21).
 
 **Stryker is not installed.** `node_modules` contains no `@stryker-mutator/*`. The latest
 published version of all three required packages is **10.0.0**; `@stryker-mutator/jest-runner@10.0.0`
@@ -299,7 +299,7 @@ git diff --stat package.json package-lock.json
 Expected:
 
 - `npm ci` exits 0 — proves the lockfile and `package.json` agree.
-- `lint`, `typecheck`, `test:unit` behave exactly as before (test:unit: 29 suites, 287 tests).
+- `lint`, `typecheck`, `test:unit` behave exactly as before (test:unit: 35 suites, 324 tests).
 - The node check prints `ok`.
 - Only `package.json` and `package-lock.json` appear in the diff.
 
@@ -585,7 +585,7 @@ npm run lint
 
 Expected:
 
-- File count `32`, line count `3383`.
+- File count `32`, line count `3400`.
 - Per-directory: `domain 9`, `application 14`, `money 4`, `result 2`, `handlers 2`, `retry 1`.
 - `npm run lint` exits 0, unchanged (the file is in the `ignores` array from Task 2).
 
@@ -593,7 +593,7 @@ Expected:
 
 - [ ] `stryker.config.mjs` exists with the content above.
 - [ ] No `thresholds` key present anywhere in it.
-- [ ] Scope measures 32 files / 3383 lines with the per-directory distribution above.
+- [ ] Scope measures 32 files / 3400 lines with the per-directory distribution above.
 - [ ] `npm run lint` unchanged.
 
 ---
@@ -616,7 +616,7 @@ read. No number in this feature may be invented, estimated, or carried in sessio
 
 1. **Precondition.** Run `npm run test:unit`. It MUST be green. A mutation run against an
    already-red suite reports a meaningless score, and the spec's edge case requires reporting the
-   broken suite rather than a number. The expected size is 29 suites / 287 tests / ~6.0 s
+   broken suite rather than a number. The expected size is 35 suites / 324 tests / ~6.9 s
    (measured 2026-09-21). If the suite is red, stop and report the failing suite — do not
    proceed, and do not fix the test (FR-023 forbids modifying tests).
 
@@ -648,7 +648,7 @@ read. No number in this feature may be invented, estimated, or carried in sessio
    - Command: `npm run test:mutation`
    - Stryker: 10.0.0
    - Configuration: `stryker.config.mjs` with **no `thresholds` block**
-   - Scope: 32 files / 3383 lines across the six FR-001 directories
+   - Scope: 32 files / 3400 lines across the six FR-001 directories
    - Unit suite at time of measurement: <N> suites / <N> tests
    - Wall-clock time: <Xm Ys>
    - Machine: <local workstation | CI runner>

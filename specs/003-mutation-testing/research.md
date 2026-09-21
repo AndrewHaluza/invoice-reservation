@@ -67,26 +67,26 @@ inside a mutation run.
 
 | Quantity | Value | How obtained |
 |---|---|---|
-| Unit suites | 29 | `jest test/unit` |
-| Unit tests | 287 | same |
-| Suite wall time | **5.99 s** | same |
+| Unit suites | 35 | `jest test/unit` |
+| Unit tests | 324 | same |
+| Suite wall time | **6.94 s** | same |
 | Full command wall time | **8.2 s** | `time npx jest test/unit` |
 | Source files in scope | **32** | `find` over the six FR-001 directories |
-| Source lines in scope | **3383** | `wc -l` over those files |
+| Source lines in scope | **3400** | `wc -l` over those files |
 
 **Decision**: target the 10-minute budget with `coverageAnalysis: 'perTest'`,
 `concurrency` left to Stryker's default (derived from available cores), a per-mutant
 `timeoutMS` of 5000 with `timeoutFactor: 1.5`, and an incremental file.
 
 **Rationale**: `perTest` is the whole budget argument. Without it every mutant re-runs all
-287 tests (~6 s each); at even 800 mutants that is over an hour regardless of parallelism.
+324 tests (~7 s each); at even 800 mutants that is over an hour regardless of parallelism.
 With `perTest`, Stryker records which tests touch which code during one initial run and
 then executes only the covering tests per mutant. The typescript-checker compounds the
 saving by discarding mutants that do not compile **before** any test runs — with
 `strict`, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes` all on, a large
 share of mutants in this codebase will not type-check.
 
-3383 lines of dense domain logic implies roughly 900–1600 mutants. This is an estimate,
+3400 lines of dense domain logic implies roughly 900–1600 mutants. This is an estimate,
 and the plan does not depend on it: FR-013 already defines what happens if the budget is
 missed, and the baseline task measures the real number.
 
@@ -261,7 +261,7 @@ longer applies would mislead rather than inform.
 
 ## R-009: Scope patterns versus the files that exist today
 
-**Measured**: the six FR-001 directories contain **32** `.ts` files and **3383** lines.
+**Measured**: the six FR-001 directories contain **32** `.ts` files and **3400** lines.
 Applying the FR-002 exclusions (`*.module.ts`, `**/entities/**`, `**/dto/**`) to those six
 directories removes **zero** files — every exclusion targets a path outside the defended
 scope.
@@ -272,3 +272,57 @@ scope.
 `dto/` folder appearing under `src/capacity/application/` later is entirely plausible, and
 the exclusions cost nothing. Dropping them because they match nothing today would be
 optimising against a snapshot.
+
+---
+
+## R-010: A source-scanning meta-test cannot run under instrumentation
+
+**Discovered during execution**, not during planning. Recorded here because Principle VII
+requires a deviation to be written down rather than silently absorbed.
+
+**The finding**: Stryker's initial dry run aborts with `ConfigError: There were failed
+tests in the initial test run`, although `npm run test:unit` is green. The failure is in
+`test/unit/no-auto-expiry.spec.ts`, whose `has no TTL or expiry configuration mentioning a
+reservation` case walks every file under `src/` with `readFileSync`, splits it into lines,
+and fails any line matching both `/reservation/i` and `/\bttl\b|expir/i`.
+
+In the working tree no line matches both: `src/capacity/domain/errors.ts` declares
+`IDEMPOTENCY_EXPIRED` and `RESERVATION_TERMINAL` on separate lines (9 and 13 in the union,
+25 and 29 in the array). Stryker copies the 32 mutated files into its sandbox and reprints
+them through its instrumenter, which collapses the two onto a single line. The meta-test
+then reads the sandbox copy — `__dirname` resolves inside the sandbox — sees one line
+carrying both tokens, and fails. The test is correct, the source is correct, and Stryker is
+correct; the three simply cannot compose.
+
+**The general shape**: a test that asserts over *source text* is incompatible with a tool
+whose whole method is rewriting source text. This is not specific to StrykerJS and would
+recur with any mutation testing tool. Architectural invariant tests of this kind — grep-like
+assertions over the tree — are the category to watch for.
+
+**Decision**: exclude `test/unit/no-auto-expiry.spec.ts` from the mutation run through
+`testPathIgnorePatterns` in `jest.mutation.config.js` **only**. `npm run test:unit`,
+`npm test` and `npm run test:cov` continue to run it unchanged.
+
+**Why this and not the alternatives**:
+
+- *Excluding `src/capacity/domain/errors.ts` from `mutate`* would shrink the defended scope
+  to 31 files, contradicting FR-001 outright and leaving part of the domain layer unfenced.
+- *Editing the meta-test to normalise whitespace or detect the sandbox* would modify an
+  existing test, which FR-023 forbids without qualification. A feature installed to enforce
+  test discipline must not begin by weakening a test to suit its own tooling.
+- The exclusion narrows the runner's test set, which deviates from FR-003's "the unit test
+  set". A recorded narrowing is the lesser breach: FR-001 and FR-023 are prohibitions,
+  FR-003 here is a description of scope.
+
+**The cost, which is not zero**: `no-auto-expiry.spec.ts` also holds genuine behavioural
+cases — assertions over `releasePolicy`, `cancelPolicy` and `scaleRate`, including `returns
+the identical decision whatever the wall clock says`. Those kill variants in
+`src/capacity/domain/policies/` and `src/shared/money/`, and excluding the file drops them
+from the measurement. **The measured baseline therefore understates what the suite actually
+detects, and the floor derived from it is correspondingly slack.** This must be stated in
+`specs/003-mutation-testing/baseline.md` alongside the number, so no reader mistakes the
+score for the suite's true effectiveness.
+
+**Not a licence to widen.** The exclusion covers exactly one file, for exactly this reason.
+A second spec failing under instrumentation is a fresh decision, not a precedent already
+granted.

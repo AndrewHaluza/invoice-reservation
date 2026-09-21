@@ -30,8 +30,8 @@ Existing: Jest 29.7.0, ts-jest 29.4.12.
 
 **Storage**: N/A. This feature reads source and writes reports; it touches no database.
 
-**Testing**: the container-free unit set only — `test/unit`, **29 suites / 287 tests /
-5.99 s** as measured on 2026-09-21. The container-dependent `test/integration`,
+**Testing**: the container-free unit set only — `test/unit`, **35 suites / 324 tests /
+6.94 s** as measured on 2026-09-21. The container-dependent `test/integration`,
 `test/migration`, `test/contract` and `test/performance` sets are structurally excluded.
 
 **Target Platform**: developer macOS/Linux workstations and `ubuntu-latest` GitHub-hosted
@@ -50,7 +50,7 @@ cross-layer import (FR-026). `docs:verify` is the documentation drift gate added
 002 in PR #12; it postdates FR-025's wording but falls squarely inside its intent.
 Both existing workflows — `ci.yml` and `release-gates.yml` — must end with a zero diff.
 
-**Scale/Scope**: **32 source files, 3383 lines** across the six defended directories, of
+**Scale/Scope**: **32 source files, 3400 lines** across the six defended directories, of
 which **zero** are removed by the FR-002 exclusion patterns today. Estimated 900–1600
 mutants; the real figure comes from the baseline run.
 
@@ -162,7 +162,7 @@ lint configuration as little as possible; if this edit is dropped, nothing break
 `0 3 * * *`. FR-015 and FR-025 apply to it exactly as they apply to `ci.yml`, and the new
 workflow's own schedule deliberately avoids that hour.
 
-Defended scope, unchanged from FR-001 — measured at 32 files / 3383 lines:
+Defended scope, unchanged from FR-001 — measured at 32 files / 3400 lines:
 
 ```text
 src/capacity/domain/**          9 files

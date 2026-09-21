@@ -25,7 +25,7 @@ The set of source paths whose test effectiveness is measured.
   a `dto/` folder appearing under `src/capacity/application/`. See research R-009.
 - Represented in: `stryker.config.mjs`, key `mutate`.
 
-**Measured size**: 32 files, 3383 lines.
+**Measured size**: 32 files, 3400 lines.
 
 ---
 
@@ -51,7 +51,7 @@ The tests permitted to run during a mutation run.
 - The config MUST NOT set `coverageThreshold`; a mutation run collects no coverage report
   and an inherited 80% gate would fail every run.
 
-**Measured content**: 29 suites, 287 tests, 5.99 s.
+**Measured content**: 35 suites, 324 tests, 6.94 s.
 
 ---
 
