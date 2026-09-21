@@ -1,5 +1,6 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { positionUnverifiedPrograms } from '../../observability/metrics';
 
 export interface RecoveryDetectionReport {
   readonly flagged: ReadonlyArray<string>;
@@ -13,6 +14,8 @@ interface RecoveryRow {
 
 @Injectable()
 export class RecoveryDetectionService implements OnModuleInit {
+  private readonly logger = new Logger(RecoveryDetectionService.name);
+
   constructor(private readonly dataSource: DataSource) {}
 
   async onModuleInit(): Promise<void> {
@@ -60,7 +63,12 @@ export class RecoveryDetectionService implements OnModuleInit {
         [row.program_id],
       );
       flagged.push(row.program_id);
+      this.logger.warn(
+        `program ${row.program_id} held unverified: stream position is behind its newest treasury ledger entry; writes are refused until a fresh snapshot clears it`,
+      );
     }
+
+    positionUnverifiedPrograms.set(flagged.length);
 
     return { flagged };
   }

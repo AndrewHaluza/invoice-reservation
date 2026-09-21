@@ -12,7 +12,7 @@ import { CapacityRefusal, RefusalCode } from '../domain/errors';
 
 // Fixed, human-readable strings. They never interpolate an amount, an identifier
 // or a program id; a caller branches on `code`, not on the prose.
-const MESSAGES: Record<RefusalCode, string> = {
+export const MESSAGES: Record<RefusalCode, string> = {
   INSUFFICIENT_CAPACITY: 'The amount exceeds available capacity.',
   PROGRAM_OVER_LIMIT: 'The program is over its credit limit.',
   FX_RATE_UNAVAILABLE:

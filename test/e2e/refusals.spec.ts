@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import request from 'supertest';
 import type { E2eApp } from '../support/e2e-app';
 import {
+  expectNoLeakedInternals,
   startE2eApp,
   stopE2eApp,
   tokenFor,
@@ -66,35 +67,6 @@ describe('capacity refusals over HTTP', () => {
       throw new Error('expected the program row to exist');
     }
     return row;
-  };
-
-  const FORBIDDEN_BODY_KEYS = new Set(['stack', 'sql', 'query']);
-
-  const collectLeakedKeys = (value: unknown, path = '$'): string[] => {
-    if (Array.isArray(value)) {
-      return value.flatMap((item, index) =>
-        collectLeakedKeys(item, `${path}[${index}]`),
-      );
-    }
-    if (typeof value !== 'object' || value === null) {
-      return [];
-    }
-    const leaked: string[] = [];
-    for (const [key, child] of Object.entries(value)) {
-      if (FORBIDDEN_BODY_KEYS.has(key)) {
-        leaked.push(`${path}.${key}`);
-      }
-      leaked.push(...collectLeakedKeys(child, `${path}.${key}`));
-    }
-    return leaked;
-  };
-
-  /**
-   * Contract F-5.5: a response body asserted by this suite never carries a
-   * `stack`, `sql` or `query` key at any depth.
-   */
-  const expectNoLeakedInternals = (body: unknown): void => {
-    expect(collectLeakedKeys(body)).toEqual([]);
   };
 
   /**

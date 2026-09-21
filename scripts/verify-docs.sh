@@ -34,7 +34,10 @@ npx jest \
   test/unit/readme-references.spec.ts \
   test/unit/openapi-schemas.spec.ts \
   test/unit/openapi-metadata.spec.ts \
-  test/unit/docs-bootstrap.spec.ts >/dev/null 2>&1 \
+  test/unit/docs-bootstrap.spec.ts \
+  test/unit/openapi-validity.spec.ts \
+  test/unit/openapi-examples.spec.ts \
+  test/unit/openapi-error-codes.spec.ts >/dev/null 2>&1 \
   || fail "documentation unit specs failed"
 ok "documentation unit specs"
 

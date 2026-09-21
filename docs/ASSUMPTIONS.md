@@ -325,10 +325,56 @@ the mechanism the repository already uses for `test:recovery` and `test:perf`.
 
 ## The `400` response names a refusal code a caller cannot observe
 
-`src/capacity/api/capacity.controller.ts` documents the `400` response at lines 109, 224 and 346
-as `'VALIDATION_FAILED or INVALID_AMOUNT'`, but a caller can never observe the second:
-`CreateReleaseDto.amount` is a `PositiveMoneyDto` whose `amountMinor` carries
-`@Matches(/^[1-9][0-9]{0,18}$/)`, so the global `ValidationPipe` returns
-`400 VALIDATION_FAILED` before the domain guard that raises `INVALID_AMOUNT` runs. FR-010
-forbids changing any production file to accommodate this suite, so the wording stands and the
-inaccuracy is recorded here instead.
+`src/capacity/api/capacity.controller.ts` used to document the `400` response at lines 109, 224
+and 346 as `'VALIDATION_FAILED or INVALID_AMOUNT'`, and a caller could never observe the second.
+That inaccuracy — a `contradicts` finding — has now been fixed: all three descriptions read
+`VALIDATION_FAILED` alone. `INVALID_AMOUNT` remains a real refusal code in `REFUSAL_CODES` raised
+by `releasePolicy`, but it is unreachable over HTTP because `CreateReleaseDto.amount` is a
+`PositiveMoneyDto` whose `amountMinor` carries `@Matches(/^[1-9][0-9]{0,18}$/)`, so the global
+`ValidationPipe` returns `400 VALIDATION_FAILED` before the domain guard runs. The code was kept
+at the domain layer; only its HTTP documentation was wrong. Conformance test 12 in
+`test/contract/openapi-conformance.contract.spec.ts` previously required every member of
+`REFUSAL_CODES` to appear in the generated document, and `INVALID_AMOUNT` satisfied it only
+through those inaccurate `400` descriptions. Test 12 now excludes the codes listed in its
+`UNREACHABLE_OVER_HTTP` constant and asserts their **absence** instead, so the document cannot
+silently regain the claim that a caller can receive a code it never can.
+
+## Per-program rate-limit fairness is not implemented, and the contention bound is the row lock
+
+`src/auth/throttler.config.ts` declares two throttlers, `read` and `write`, both on a
+60-second window and both keyed per organisation. FR-033's second clause — that one
+organisation must not deny service to another by monopolising contention on a single program —
+has no corresponding mechanism. A third throttler keyed on `programId` is not built because it
+would change the rate limit every caller experiences and would require a product decision on
+the limit value. The correctness harm it guards against is already bounded:
+`src/capacity/infrastructure/unit-of-work.ts` takes one program row lock per transaction, so a
+competing writer waits rather than fails, and `test/e2e/contention.spec.ts` proves five
+simultaneous writers all receive `201` with an exact resulting position. What remains unguarded
+is latency under a hostile same-program flood — not correctness, and not cross-organisation
+data exposure. The debt falls due the day a caller reports program-level latency starvation, or
+an endpoint that accepts more than one program lands.
+
+## The concurrency storm is asserted once, not twenty times
+
+SC-001 requires the 1,000-request result "in 100% of 20 consecutive runs";
+`test/integration/concurrency.spec.ts` drives it once, under `jest.setTimeout(300_000)`. Twenty
+consecutive runs would put one spec near an hour and would dominate every CI run. The property
+is covered more cheaply by `test/e2e/capacity-boundary.spec.ts`, which pins the boundary
+deterministically at the exact edge, one minor unit over, and again after a release — the place
+an off-by-one actually shows. The deviation costs a late signal: a genuinely flaky race would
+be caught on a developer's run rather than by the gate. The first flake observed in the storm
+spec makes the repeat harness owed immediately.
+
+## The exported document has not been imported into two API clients by hand
+
+SC-003 and 002's US2 scenarios 2 and 3 require the exported document to import cleanly into two
+mainstream API clients, with every operation runnable and one collection-level bearer token
+authorising all of them. No artefact in the repository evidences this, and it is not automated
+because it requires a human driving two GUI clients against a seeded instance. What is automated
+in its place is `test/unit/openapi-validity.spec.ts`, which validates the generated document
+against the OpenAPI 3.1 meta-schema; a document that satisfies that meta-schema is one a
+conformant client can parse. The residual manual step is recorded so its bar is unambiguous: run
+`npm run openapi:export`, import the result into two clients, confirm zero import errors,
+confirm every operation appears as a runnable request, set the bearer token once at collection
+level and confirm it authorises all of them, then execute `getAvailability` and
+`createReservation` against a seeded instance with no hand-editing of any request.

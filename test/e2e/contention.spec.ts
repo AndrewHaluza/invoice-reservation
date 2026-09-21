@@ -12,6 +12,7 @@
 import request from 'supertest';
 import type { E2eApp } from '../support/e2e-app';
 import {
+  expectNoLeakedInternals,
   startE2eApp,
   stopE2eApp,
   tokenFor,
@@ -140,6 +141,7 @@ describe('single-program contention over HTTP', () => {
     );
 
     responses.forEach(expectAccepted);
+    responses.forEach((response) => expectNoLeakedInternals(response.body));
 
     // No write lost, none double-counted: the exact sum of the five accepted
     // reservations.
@@ -168,6 +170,7 @@ describe('single-program contention over HTTP', () => {
       },
     );
     expectAccepted(released);
+    expectNoLeakedInternals(released.body);
 
     const cancelled = await postReservation(
       programId,
@@ -179,6 +182,7 @@ describe('single-program contention over HTTP', () => {
       },
     );
     expectAccepted(cancelled);
+    expectNoLeakedInternals(cancelled.body);
 
     const responses = await Promise.all([
       postReservation(programId, token, 'contention-mixed-new-key', {
@@ -202,6 +206,7 @@ describe('single-program contention over HTTP', () => {
     ]);
 
     responses.forEach(expectAccepted);
+    responses.forEach((response) => expectNoLeakedInternals(response.body));
 
     // 100000 + 100000 + 50000 - 40000 - 100000 = 110000.
     const after = await readProgram(programId);
