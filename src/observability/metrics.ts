@@ -31,6 +31,7 @@ export let consumerLagMessages: Gauge<'program_id'>;
 export let overLimitPrograms: Gauge;
 export let dlqDepth: Gauge;
 export let investigationRequiredPrograms: Gauge;
+export let positionUnverifiedPrograms: Gauge;
 
 /**
  * Registers every collector. Idempotent: prom-client's default registry is
@@ -97,6 +98,16 @@ export function registerMetrics(): void {
       new Gauge({
         name: 'investigation_required_programs',
         help: 'Programs the consumer has flagged as requiring investigation.',
+        registers: [metricsRegistry],
+      }),
+  );
+
+  positionUnverifiedPrograms = getOrCreate(
+    'position_unverified_programs',
+    () =>
+      new Gauge({
+        name: 'position_unverified_programs',
+        help: 'Programs held unverified pending a fresh treasury snapshot.',
         registers: [metricsRegistry],
       }),
   );

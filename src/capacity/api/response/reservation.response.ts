@@ -17,6 +17,7 @@ export class ReservationFxResponse {
   @ApiProperty({
     type: String,
     format: 'date-time',
+    example: '2026-01-01T00:00:00.000Z',
     description: 'When the applied rate was effective.',
   })
   effectiveAt!: string;
@@ -75,7 +76,11 @@ export class ReservationResponse {
   })
   fx!: ReservationFxResponse | null;
 
-  @ApiProperty({ type: String, format: 'date-time' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-01-01T00:00:00.000Z',
+  })
   createdAt!: string;
 }
 

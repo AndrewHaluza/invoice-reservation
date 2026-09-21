@@ -12,6 +12,7 @@
 import request from 'supertest';
 import type { E2eApp } from '../support/e2e-app';
 import {
+  expectNoLeakedInternals,
   startE2eApp,
   stopE2eApp,
   tokenFor,
@@ -107,6 +108,7 @@ describe('capacity boundary over HTTP', () => {
       },
     );
     expect(accepted.status).toBe(201);
+    expectNoLeakedInternals(accepted.body);
     expect(accepted.body.availability.available.amountMinor).toBe('0');
 
     const after = await readProgram(programId);
@@ -152,6 +154,7 @@ describe('capacity boundary over HTTP', () => {
       status: 409,
       code: 'INSUFFICIENT_CAPACITY',
     });
+    expectNoLeakedInternals(refused.body);
     // The policy sets both details; asserting them pins the arithmetic rather
     // than merely the outcome.
     expect(refused.body.details.requestedMinor).toBe(requested.toString());
@@ -186,6 +189,7 @@ describe('capacity boundary over HTTP', () => {
       },
     );
     expect(full.status).toBe(201);
+    expectNoLeakedInternals(full.body);
 
     const refused = await postReservation(
       programId,
@@ -200,6 +204,7 @@ describe('capacity boundary over HTTP', () => {
       status: 409,
       code: 'INSUFFICIENT_CAPACITY',
     });
+    expectNoLeakedInternals(refused.body);
 
     const released = await postRelease(
       programId,
@@ -209,6 +214,7 @@ describe('capacity boundary over HTTP', () => {
       { amount: { amountMinor: '250000', currency: 'USD' } },
     );
     expect(released.status).toBe(201);
+    expectNoLeakedInternals(released.body);
 
     const afterRelease = await readProgram(programId);
     expect(afterRelease.local_reserved_minor).toBe(
@@ -225,6 +231,7 @@ describe('capacity boundary over HTTP', () => {
       },
     );
     expect(reReserved.status).toBe(201);
+    expectNoLeakedInternals(reReserved.body);
 
     const final = await readProgram(programId);
     expect(final.local_reserved_minor).toBe(available.toString());

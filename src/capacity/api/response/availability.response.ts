@@ -114,6 +114,7 @@ export class AvailabilityResponse {
   @ApiProperty({
     type: String,
     format: 'date-time',
+    example: '2026-01-01T00:00:00.000Z',
     description: 'When the cached position last changed.',
   })
   positionChangedAt!: string;

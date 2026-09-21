@@ -455,7 +455,7 @@ evidence at all.
 
 ## Phase 7: Convergence
 
-- [ ] T030 Extend the no-leaked-internals assertion to `test/e2e/capacity-boundary.spec.ts`
+- [x] T030 Extend the no-leaked-internals assertion to `test/e2e/capacity-boundary.spec.ts`
       and `test/e2e/contention.spec.ts` per FR-006 (partial). `expectNoLeakedInternals` and
       its `FORBIDDEN_BODY_KEYS` set (`stack`, `sql`, `query`, checked recursively at any
       depth) exist today only in `test/e2e/refusals.spec.ts` lines 71-96. FR-006 binds every

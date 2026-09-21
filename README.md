@@ -63,7 +63,8 @@ production. When it is disabled the paths are not registered at all.
 
 When enabled, the running service serves the Swagger UI at /docs, the OpenAPI 3.1 JSON document
 at /docs/openapi.json, and the YAML document at /docs/openapi.yaml
-([open the UI](http://localhost:3000/docs)).
+(open `http://localhost:$PORT/docs`; `./scripts/dev-stack.sh env` prints the resolved
+port).
 
 ## Testing
 

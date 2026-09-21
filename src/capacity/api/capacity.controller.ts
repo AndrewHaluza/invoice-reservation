@@ -95,7 +95,12 @@ export class CapacityController {
     required: true,
     description:
       'Required, 8 to 128 characters. A replay carrying identical content returns the original outcome with status 200. A replay carrying different content is refused 409 IDEMPOTENCY_CONFLICT — the original outcome is never replayed for a differing request. Retained at least 30 days.',
-    schema: { type: 'string', minLength: 8, maxLength: 128 },
+    schema: {
+      type: 'string',
+      minLength: 8,
+      maxLength: 128,
+      example: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    },
   })
   @ApiResponse({ status: 201, description: 'Created', type: ReserveResponse })
   @ApiResponse({
@@ -106,7 +111,7 @@ export class CapacityController {
   })
   @ApiResponse({
     status: 400,
-    description: 'VALIDATION_FAILED or INVALID_AMOUNT',
+    description: 'VALIDATION_FAILED',
     type: ErrorResponse,
   })
   @ApiResponse({
@@ -210,7 +215,12 @@ export class CapacityController {
     required: true,
     description:
       'Required, 8 to 128 characters. A replay carrying identical content returns the original outcome with status 200. A replay carrying different content is refused 409 IDEMPOTENCY_CONFLICT — the original outcome is never replayed for a differing request. Retained at least 30 days.',
-    schema: { type: 'string', minLength: 8, maxLength: 128 },
+    schema: {
+      type: 'string',
+      minLength: 8,
+      maxLength: 128,
+      example: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    },
   })
   @ApiResponse({ status: 201, description: 'Created', type: ReleaseResponse })
   @ApiResponse({
@@ -221,7 +231,7 @@ export class CapacityController {
   })
   @ApiResponse({
     status: 400,
-    description: 'VALIDATION_FAILED or INVALID_AMOUNT',
+    description: 'VALIDATION_FAILED',
     type: ErrorResponse,
   })
   @ApiResponse({
@@ -332,7 +342,12 @@ export class CapacityController {
     required: true,
     description:
       'Required, 8 to 128 characters. A replay carrying identical content returns the original outcome with status 200. A replay carrying different content is refused 409 IDEMPOTENCY_CONFLICT — the original outcome is never replayed for a differing request. Retained at least 30 days.',
-    schema: { type: 'string', minLength: 8, maxLength: 128 },
+    schema: {
+      type: 'string',
+      minLength: 8,
+      maxLength: 128,
+      example: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    },
   })
   @ApiResponse({ status: 201, description: 'Created', type: CancelResponse })
   @ApiResponse({
@@ -343,7 +358,7 @@ export class CapacityController {
   })
   @ApiResponse({
     status: 400,
-    description: 'VALIDATION_FAILED or INVALID_AMOUNT',
+    description: 'VALIDATION_FAILED',
     type: ErrorResponse,
   })
   @ApiResponse({

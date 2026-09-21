@@ -13,6 +13,35 @@ export const JWT_SECRET = 'e2e-test-secret-0123456789abcdefghij';
 export const WRITE_SCOPE = 'capacity:write';
 export const READ_SCOPE = 'capacity:read';
 
+const FORBIDDEN_BODY_KEYS = new Set(['stack', 'sql', 'query']);
+
+export const collectLeakedKeys = (value: unknown, path = '$'): string[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectLeakedKeys(item, `${path}[${index}]`),
+    );
+  }
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+  const leaked: string[] = [];
+  for (const [key, child] of Object.entries(value)) {
+    if (FORBIDDEN_BODY_KEYS.has(key)) {
+      leaked.push(`${path}.${key}`);
+    }
+    leaked.push(...collectLeakedKeys(child, `${path}.${key}`));
+  }
+  return leaked;
+};
+
+/**
+ * Contract F-5.5: a response body asserted by this suite never carries a
+ * `stack`, `sql` or `query` key at any depth.
+ */
+export const expectNoLeakedInternals = (body: unknown): void => {
+  expect(collectLeakedKeys(body)).toEqual([]);
+};
+
 export interface E2eApp {
   app: INestApplication;
   owner: DataSource; // the OWNER connection, for fixture setup and row reads

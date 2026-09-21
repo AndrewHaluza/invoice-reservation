@@ -64,6 +64,17 @@ const IDEMPOTENT_OPERATION_IDS = [
   'cancelReservation',
 ];
 
+/**
+ * Refusal codes that exist in the domain but cannot be observed over HTTP, so the
+ * generated document must NOT document them. `INVALID_AMOUNT` is raised by
+ * `releasePolicy` for a non-positive release amount, but `CreateReleaseDto.amount` is a
+ * `PositiveMoneyDto` whose `amountMinor` carries `@Matches(/^[1-9][0-9]{0,18}$/)`, so the
+ * global ValidationPipe returns `400 VALIDATION_FAILED` before the domain guard runs.
+ * `specs/001-program-capacity-reservation/contracts/errors.md` — the oracle — does not
+ * list it either.
+ */
+const UNREACHABLE_OVER_HTTP: readonly string[] = ['INVALID_AMOUNT'];
+
 const savedEnv = new Map<string, string | undefined>();
 
 const setEnv = (key: string, value: string): void => {
@@ -425,6 +436,11 @@ describe('OpenAPI conformance against the live router and the 001 contract', () 
   it('12. every refusal code is documented and 503 never means anything else', () => {
     const serialised = JSON.stringify(document);
     for (const code of REFUSAL_CODES) {
+      if (UNREACHABLE_OVER_HTTP.includes(code)) {
+        // Documenting it would tell a caller about a code it can never receive.
+        expect(serialised).not.toContain(code);
+        continue;
+      }
       expect(serialised).toContain(code);
     }
 

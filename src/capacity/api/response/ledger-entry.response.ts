@@ -71,6 +71,7 @@ export class LedgerEntryResponse {
   @ApiProperty({
     type: String,
     format: 'date-time',
+    example: '2026-01-01T00:00:00.000Z',
     description: 'When the entry occurred.',
   })
   occurredAt!: string;
