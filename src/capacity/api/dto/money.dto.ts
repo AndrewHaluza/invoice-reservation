@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   Matches,
@@ -23,11 +24,13 @@ export class FitsInt64 implements ValidatorConstraintInterface {
 }
 
 export class MoneyDto {
+  @ApiProperty({ type: String, pattern: '^-?[0-9]+$', example: '150000' })
   @IsString()
   @Matches(/^-?[0-9]{1,19}$/, { message: 'amountMinor must be an integer string' })
   @Validate(FitsInt64)
   amountMinor!: string;
 
+  @ApiProperty({ type: String, pattern: '^[A-Z]{3}$', example: 'USD' })
   @IsString()
   @Matches(/^[A-Z]{3}$/, { message: 'currency must be an ISO-4217 alphabetic code' })
   currency!: string;

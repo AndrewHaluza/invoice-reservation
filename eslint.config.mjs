@@ -40,6 +40,7 @@ export default [
         { type: 'auth', pattern: 'src/auth/**' },
         { type: 'config', pattern: 'src/config/**' },
         { type: 'observability', pattern: 'src/observability/**' },
+        { type: 'docs', pattern: 'src/docs/**' },
       ],
     },
     rules: {
@@ -58,6 +59,7 @@ export default [
             { from: { element: { type: 'shared' } }, allow: [{ to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'config' } }] }] },
             { from: { element: { type: 'config' } }, allow: [{ to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'config' } }] }] },
             { from: { element: { type: 'observability' } }, allow: [{ to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'config' } }] }] },
+            { from: { element: { type: 'docs' } }, allow: [{ to: [{ element: { type: 'shared' } }] }, { to: [{ element: { type: 'config' } }] }] },
           ],
         },
       ],

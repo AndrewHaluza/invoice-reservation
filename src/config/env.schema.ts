@@ -3,6 +3,9 @@ import Joi from 'joi';
 export const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
   PORT: Joi.number().port().default(3000),
+  API_DOCS_ENABLED: Joi.string()
+    .valid('true', 'false')
+    .default(process.env.NODE_ENV === 'production' ? 'false' : 'true'),
   DATABASE_URL: Joi.string().uri().required(),
   MIGRATION_DATABASE_URL: Joi.string().uri().optional(),
   REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).required(),
