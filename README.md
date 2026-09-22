@@ -94,6 +94,22 @@ All configuration is environment-supplied and validated at boot by Joi in
 `src/config/env.schema.ts`; boot fails naming any missing variable. `.env.example` holds the local
 values, and its values are local development only.
 
+### Log verbosity
+
+`LOG_LEVEL` sets the pino output level to one of
+`trace | debug | info | warn | error | fatal | silent`. It defaults to `info`, and to `warn` when
+`NODE_ENV=test`, so a full `npm test` run emits no routine per-request records and its verdict is
+readable in the last lines of output. A misspelled value refuses the boot. Restore the per-request
+records for a single run, without editing any file, with:
+
+```bash
+LOG_LEVEL=info npm test
+```
+
+`pino-http` writes every request-completion record at `info`, so the `warn` test default
+suppresses all of them — including deliberate 4xx refusals — while application-level warnings and
+errors still print. The recipe above brings them back for one run.
+
 ## Further reading
 
 - [Constitution](.specify/memory/constitution.md)

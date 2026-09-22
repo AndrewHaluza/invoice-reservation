@@ -6,6 +6,10 @@ export const envSchema = Joi.object({
   API_DOCS_ENABLED: Joi.string()
     .valid('true', 'false')
     .default(process.env.NODE_ENV === 'production' ? 'false' : 'true'),
+  LOG_LEVEL: Joi.string()
+    .valid('trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent')
+    .empty('')
+    .default(process.env.NODE_ENV === 'test' ? 'warn' : 'info'),
   DATABASE_URL: Joi.string().uri().required(),
   MIGRATION_DATABASE_URL: Joi.string().uri().optional(),
   REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).required(),

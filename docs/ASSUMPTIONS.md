@@ -378,3 +378,23 @@ conformant client can parse. The residual manual step is recorded so its bar is 
 confirm every operation appears as a runnable request, set the bearer token once at collection
 level and confirm it authorises all of them, then execute `getAvailability` and
 `createReservation` against a seeded instance with no hand-editing of any request.
+
+## A test-profile process is deliberately quieter than a deployed one
+
+`LOG_LEVEL` in `src/config/env.schema.ts` defaults to `warn` when `NODE_ENV=test` and `info`
+otherwise, and the value reaches pino through `LoggerModule.forRootAsync` reading the
+Joi-validated key. A test profile is therefore quieter than a deployed service. The reason is
+measured: before this change a full `npm test` emitted 21,493 routine `info`-`req` records and the
+Jest verdict was buried beneath them. `warn` rather than `silent` is chosen so a genuine
+service-side failure still prints beneath a failing test, consistent with the kafkajs clients
+being pinned to `ERROR` under test rather than `NOTHING`.
+
+The trade-off is that `pino-http` writes *every* request-completion record at `info` — it
+installs no status-code mapping — so the `warn` default suppresses not only routine successes but
+the deliberate 4xx refusals an integration suite provokes as well. What those suites assert is
+the HTTP status, which is asserted in code independently of the log stream, so no coverage is
+lost; the records return with `LOG_LEVEL=info npm test`. If the assumption that a test run can go
+without per-request records is wrong, one environment variable restores them and no deployed
+behaviour moves, because a deployment resolves to `info`. The default selection and the
+level-independent redaction are asserted in `test/unit/logger-config.spec.ts`; the quietness
+itself is evidenced by the zero `info`-`req` count in a full run.

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Kafka, type Producer } from 'kafkajs';
+import { Kafka, logLevel, type Producer } from 'kafkajs';
 import { randomUUID } from 'node:crypto';
 import { scheduler } from 'node:timers/promises';
 import { StreamLagRegistry } from '../../src/shared/stream-lag';
@@ -85,7 +85,11 @@ describe('stream lag probe', () => {
     registry = moduleRef.get(StreamLagRegistry);
     await moduleRef.init();
 
-    producer = new Kafka({ brokers: redpanda.brokers, ssl: false }).producer();
+    producer = new Kafka({
+      brokers: redpanda.brokers,
+      ssl: false,
+      logLevel: logLevel.ERROR,
+    }).producer();
     await producer.connect();
 
     await waitUntilConsuming();
@@ -157,7 +161,11 @@ describe('stream lag probe', () => {
   });
 
   it('does not commit offsets', async () => {
-    const admin = new Kafka({ brokers: redpanda.brokers, ssl: false }).admin();
+    const admin = new Kafka({
+      brokers: redpanda.brokers,
+      ssl: false,
+      logLevel: logLevel.ERROR,
+    }).admin();
     await admin.connect();
     try {
       const offsets = await admin.fetchOffsets({
