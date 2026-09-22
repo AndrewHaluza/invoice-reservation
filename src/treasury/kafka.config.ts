@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { logLevel } from 'kafkajs';
 import type { KafkaConfig } from 'kafkajs';
 import { registerKafkaCodecs } from './kafka-codecs';
 
@@ -33,5 +34,6 @@ export function buildKafkaConfig(config: ConfigService): KafkaConfig {
     retry: {
       retries: 5,
     },
+    logLevel: config.get<string>('NODE_ENV') === 'test' ? logLevel.ERROR : logLevel.INFO,
   };
 }

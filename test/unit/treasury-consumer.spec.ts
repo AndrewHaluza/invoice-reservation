@@ -68,6 +68,7 @@ jest.mock('kafkajs', () => {
     PartitionAssigners: { roundRobin: () => ({}) },
     CompressionCodecs: {},
     CompressionTypes: { Snappy: 2 },
+    logLevel: { NOTHING: 0, ERROR: 1, WARN: 2, INFO: 4, DEBUG: 5 },
     __consumer: consumer,
   };
 });

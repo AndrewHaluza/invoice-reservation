@@ -1,5 +1,5 @@
 import { RedpandaContainer } from '@testcontainers/redpanda';
-import { Kafka } from 'kafkajs';
+import { Kafka, logLevel } from 'kafkajs';
 
 export interface RedpandaFixture {
   brokers: string[];
@@ -22,7 +22,7 @@ export async function startRedpanda(): Promise<RedpandaFixture> {
 
   const brokers = [container.getBootstrapServers()];
 
-  const admin = new Kafka({ brokers, ssl: false }).admin();
+  const admin = new Kafka({ brokers, ssl: false, logLevel: logLevel.ERROR }).admin();
   await admin.connect();
   try {
     await admin.createTopics({

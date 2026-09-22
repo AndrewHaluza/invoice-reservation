@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ThrottlerStorage } from '@nestjs/throttler';
-import { Kafka, type Producer } from 'kafkajs';
+import { Kafka, logLevel, type Producer } from 'kafkajs';
 import { sign } from 'jsonwebtoken';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
@@ -175,7 +175,11 @@ describe('SC-002a treasury change visibility', () => {
     // and tears down the HTTP server per request, which races under load.
     await app.listen(0);
 
-    producer = new Kafka({ brokers: redpanda.brokers, ssl: false }).producer();
+    producer = new Kafka({
+      brokers: redpanda.brokers,
+      ssl: false,
+      logLevel: logLevel.ERROR,
+    }).producer();
     await producer.connect();
 
     bearer = `Bearer ${sign(
